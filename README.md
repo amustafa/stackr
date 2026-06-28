@@ -315,6 +315,125 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 | `sr shell-hook` | Print shell integration script |
 | `sr completion` | Generate shell completion scripts |
 
+## Methodology
+
+Stackr is built around a development rhythm: plan the decomposition, build bottom-up, track decisions as you go, and submit in clean increments. This section describes how to use stackr effectively — whether you're working solo, with a team, or with AI agents.
+
+### Think in Layers, Not Features
+
+Before writing code, decompose your feature into layers that build on each other. Each layer becomes a branch. The bottom of the stack should be the most foundational change — the thing everything else depends on.
+
+```
+# Bad: one giant branch
+feat-auth (47 files, 2000 lines)
+
+# Good: layered stack
+feat-auth-models       ← data structures, types
+feat-auth-middleware   ← request validation, token parsing
+feat-auth-api          ← endpoints that use the middleware
+feat-auth-tests        ← integration tests
+```
+
+Each branch should be independently reviewable. A reviewer looking at `feat-auth-middleware` should only need to understand `feat-auth-models` below it — not the entire feature.
+
+### Build Bottom-Up, Review Bottom-Up
+
+Start at the bottom of your stack and work upward. When you create a new branch, give it a clear objective:
+
+```bash
+sr create feat-auth-models --desc "User and session types for JWT auth"
+```
+
+Commit with `sr commit` instead of `git commit` to keep the graph in sync and attach reasoning:
+
+```bash
+sr commit -a -m "add session model" --context '{"key":"design","text":"Sessions are stateless JWTs, not DB-backed"}'
+```
+
+When you're ready for review, submit the whole stack:
+
+```bash
+sr submit --stack
+```
+
+Reviewers should merge from the bottom up. As each PR merges, `sr sync` cleans it from the stack and rebases everything above.
+
+### Track Decisions, Not Just Code
+
+Code says *what* changed. Context says *why*. Stackr has two levels:
+
+**Branch context** — high-level decisions that apply to the whole branch:
+
+```bash
+sr context set approach "Stateless JWTs over DB sessions — latency constraint"
+sr context set tradeoff "No revocation without a blocklist; acceptable for v1"
+```
+
+**Commit context** — per-step reasoning attached to individual commits:
+
+```bash
+sr commit -a -m "add token rotation" --context '{"key":"step","text":"Refresh tokens rotate on use per OWASP guidelines","sources":[{"type":"url","reference":"https://cheatsheetseries.owasp.org/..."}]}'
+```
+
+Both feed into PR description generation (`sr submit --ai`) and are visible via `sr info`. Both are lost on squash — persist anything that should outlive the branch to a file before squashing.
+
+### Handle Review Comments Across the Stack
+
+When reviewers leave comments on your stack, `sr address-review` walks from the bottom up, presents each unresolved thread, and lets you edit code, reply, and resolve — then commits, restacks, and moves to the next branch.
+
+```bash
+# Interactive walkthrough
+sr address-review
+
+# Let Claude handle everything
+sr address-review --ai
+```
+
+### Keep the Stack Healthy
+
+| Situation | Command |
+|-----------|---------|
+| Trunk moved (someone merged) | `sr sync` |
+| Reviewer requested changes mid-stack | `sr checkout <branch>`, fix, `sr restack` |
+| Branch got too big | `sr split` |
+| Branch is trivial, fold into parent | `sr fold` |
+| Need to reorder the stack | `sr reorder` |
+| Made a mistake | `sr undo` |
+
+### Working with AI Agents
+
+Stackr is designed for both human and AI-driven development. Every workflow command follows a three-mode pattern:
+
+1. **Interactive** — the bare command runs a terminal walkthrough for humans
+2. **Programmatic** — `--aiprepare` outputs JSON context, `--title`/`--body`/`--context` accept structured input. An agent already in a session composes these.
+3. **Autonomous** — `--ai` spawns a Claude session that owns the workflow end-to-end
+
+**The agent workflow:**
+1. Agent reads the branch state: `sr info`, `sr log`
+2. Agent sets context as it works: `sr context set`, `sr commit --context`
+3. Agent submits when ready: `sr submit --aiprepare` → craft PR → `sr submit --title "..." --body "..."`
+4. Agent addresses review comments: `sr address-review --aiprepare` → make fixes → reply and resolve
+
+Context entries are the key integration point. They let the agent explain its reasoning in a structured way that persists across sessions and feeds into PR generation.
+
+### Worktrees for Parallel Work
+
+For long-running branches or when you want to keep your main working tree clean:
+
+```bash
+sr create feat-experiment --desc "Try approach B" --worktree
+# Creates .worktrees/feat-experiment/ — main working tree stays on current branch
+```
+
+Add a `.stackr/hooks/post-worktree` script to automate setup (copying `.env`, running `direnv allow`, etc.):
+
+```bash
+#!/bin/bash
+# .stackr/hooks/post-worktree
+cp .env "$1/.env"
+cd "$1" && direnv allow
+```
+
 ## Workflows
 
 ### Daily Development

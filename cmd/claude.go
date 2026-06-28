@@ -83,40 +83,49 @@ description: >
 This repo uses stackr for stacked branch management. Use sr commands instead of
 raw git for branch operations.
 
+## How to Work
+
+Decompose features into layered branches that build on each other. Each branch
+should be independently reviewable. Build bottom-up: foundational changes first,
+dependent changes stacked on top.
+
+When creating a branch, always set an objective:
+
+    sr create feat-auth-models --desc "User and session types for JWT auth"
+
+Use sr commit (not git commit) to keep the graph in sync:
+
+    sr commit -a -m "add session model"
+
+Track decisions as you go — this is what separates good stacks from chaotic ones.
+
 ## Context Tracking — Do This As You Work
 
-When working on a branch, proactively track decisions and context. This metadata
-persists across sessions and feeds into PR description generation.
+Two levels of context exist. Use both proactively.
 
-**Add context when you make a decision or discover something relevant:**
+**Branch context** — high-level decisions for the whole branch:
 
-    sr context set <key> <text> [--source type:reference] [--ticket PROJ-123]
-
-Examples:
-
-    sr context set approach "Using optimistic locking to avoid DB contention"
+    sr context set approach "Stateless JWTs — no DB sessions"
+    sr context set tradeoff "No revocation without blocklist; ok for v1"
     sr context set design "Split handler into middleware chain" --source file:internal/api/handler.go
-    sr context set scope "Auth refresh + token rotation" --ticket AUTH-456,AUTH-789
 
-**Manage context:**
+**Commit context** — per-step reasoning (JSON blob):
 
-    sr context list          # Show all context entries
-    sr context rm <key>      # Remove a stale entry
+    sr commit -a -m "add rotation" --context '{"key":"step","text":"Refresh tokens rotate per OWASP","sources":[{"type":"url","reference":"https://..."}]}'
 
-**Set the branch objective:**
+Both feed into PR generation and are visible via sr info.
+Both are lost on squash — persist important context to files first.
 
-    sr describe "Add JWT refresh token rotation"
-    sr describe                                    # Show current objective
+### What to Track
 
-### When to Set Context
+- Design choice: key "design", "approach", "tradeoff"
+- Plan reference: key "step", with --source file:path/to/plan.md
+- Related files: key "related-files", with --source flag
+- Tickets: use --ticket flag
+- Rationale: key "rationale" — why this approach over alternatives
+- Followup: key "followup" — things to revisit later
 
-- Non-obvious design choice: key "design", "approach", "tradeoff"
-- Relevant files or dependencies: key "related-files", with --source flag
-- Linked tickets or issues: use --ticket flag
-- Notes for future work: key "note", "followup"
-- Rationale for choosing one approach over another: key "rationale"
-
-Remove entries when they become stale or the branch objective changes.
+Remove stale entries with sr context rm.
 
 ## Core Workflow
 

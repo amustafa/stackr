@@ -163,7 +163,12 @@ func submitStack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store
 func submitSingle(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
 	b := g.Branches[current]
 	if b == nil {
-		return fmt.Errorf("branch %q not found in stack graph", current)
+		trunk := g.TrunkName()
+		trunkExists, _ := c.Git.BranchExists(trunk)
+		if trunk != "" && !trunkExists {
+			return fmt.Errorf("branch %q not in stack graph — trunk is recorded as %q which no longer exists (renamed to %q?). Run: sr init --trunk %s --reset", current, trunk, current, current)
+		}
+		return fmt.Errorf("branch %q not found in stack graph — track it with `sr create` or `sr track`", current)
 	}
 	if b.IsTrunk {
 		fmt.Println("Cannot submit trunk branch")
