@@ -137,48 +137,21 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 	return cmd.Run()
 }
 
-// submitStack pushes all branches in the stack.
+// submitStack pushes downstack ancestors, current branch, and upstack dependents.
 func submitStack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
-	branches := g.StackOf(current)
-
-	if !c.Quiet {
-		fmt.Printf("Stack mode: found %d branch(es) in stack of %s\n", len(branches), current)
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
 	}
 
-	var toPush []string
-	for _, name := range branches {
-		b := g.Branches[name]
-		if b == nil || b.IsTrunk || b.Frozen {
-			continue
-		}
-		if opts.UpdateOnly {
-			exists, _ := c.Git.RemoteBranchExists(cfg.Remote, name)
-			if !exists {
-				continue
-			}
-		}
-		toPush = append(toPush, name)
+	b := g.Branches[current]
+	if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName); err != nil {
+		return err
 	}
 
-	if len(toPush) == 0 {
-		fmt.Println("No branches to push")
-		return nil
+	if err := pushUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
 	}
 
-	if !c.Quiet {
-		fmt.Printf("Pushing %d branch(es): %s\n", len(toPush), strings.Join(toPush, ", "))
-	}
-
-	for _, name := range toPush {
-		b := g.Branches[name]
-		if err := pushBranch(c, cfg, opts, prInfo, name, b.ParentBranchName); err != nil {
-			return err
-		}
-	}
-
-	if !c.Quiet {
-		fmt.Println("Saving PR metadata")
-	}
 	if err := c.Store.WritePRInfo(prInfo); err != nil {
 		return err
 	}
@@ -229,43 +202,18 @@ func submitSingle(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *stor
 }
 
 // submitExisting handles the flow when a PR already exists:
-// push all downstack ancestors, push current, offer to push upstack children.
+// push downstack ancestors, push current, offer to push upstack.
 func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string, existing *PRResult) error {
 	fmt.Printf("PR #%d already exists for %s (%s)\n", existing.Number, current, existing.URL)
 
-	// Push all downstack (ancestor) branches.
-	downstack := g.Downstack(current)
-	// Downstack returns [current, parent, grandparent, ...trunk].
-	// Push ancestors in bottom-up order (reverse, skip current and trunk).
-	ancestorCount := 0
-	for i := len(downstack) - 1; i >= 1; i-- {
-		a := g.Branches[downstack[i]]
-		if a != nil && !a.IsTrunk && !a.Frozen {
-			ancestorCount++
-		}
-	}
-	if !c.Quiet && ancestorCount > 0 {
-		fmt.Printf("Pushing %d downstack ancestor(s) first\n", ancestorCount)
-	}
-	for i := len(downstack) - 1; i >= 1; i-- {
-		name := downstack[i]
-		ancestor := g.Branches[name]
-		if ancestor == nil || ancestor.IsTrunk || ancestor.Frozen {
-			continue
-		}
-		if err := pushBranch(c, cfg, opts, prInfo, name, ancestor.ParentBranchName); err != nil {
-			return err
-		}
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
 	}
 
-	// Push current branch.
 	if err := pushBranch(c, cfg, opts, prInfo, current, g.Branches[current].ParentBranchName); err != nil {
 		return err
 	}
 
-	if !c.Quiet {
-		fmt.Printf("Syncing local PR metadata from GitHub for %s\n", current)
-	}
 	// Update local PR info from GitHub data.
 	if prInfo.Branches[current] == nil {
 		prInfo.Branches[current] = &store.BranchPR{}
@@ -277,32 +225,8 @@ func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *st
 	pr.Title = existing.Title
 	pr.Draft = existing.Draft
 
-	// Offer to push upstack children if interactive.
-	children := g.ChildrenOf(current)
-	if c.Interactive && len(children) > 0 {
-		// Count total upstack branches (excluding current).
-		upstack := g.Upstack(current)
-		upstackCount := len(upstack) - 1 // exclude current
-		if upstackCount > 0 {
-			yes, err := ui.Confirm(fmt.Sprintf("Push %d upstack branch(es) too?", upstackCount))
-			if err != nil {
-				return err
-			}
-			if yes {
-				if !c.Quiet {
-					fmt.Printf("Pushing %d upstack branch(es)\n", upstackCount)
-				}
-				for _, name := range upstack[1:] { // skip current (index 0)
-					ub := g.Branches[name]
-					if ub == nil || ub.IsTrunk || ub.Frozen {
-						continue
-					}
-					if err := pushBranch(c, cfg, opts, prInfo, name, ub.ParentBranchName); err != nil {
-						return err
-					}
-				}
-			}
-		}
+	if err := offerUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
 	}
 
 	return c.Store.WritePRInfo(prInfo)
@@ -311,6 +235,11 @@ func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *st
 // submitNewBranch handles the flow when no PR exists yet.
 func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
 	b := g.Branches[current]
+
+	// Push downstack ancestors first (always, all modes).
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
+	}
 
 	// Programmatic mode: title and body provided, skip prompts.
 	if opts.Title != "" {
@@ -402,7 +331,78 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 		}
 	}
 
+	// Offer to push upstack.
+	if err := offerUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+		return err
+	}
+
 	return c.Store.WritePRInfo(prInfo)
+}
+
+// pushDownstack pushes all downstack ancestors of current (excluding current and trunk).
+func pushDownstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+	downstack := g.Downstack(current)
+	// Downstack returns [current, parent, grandparent, ...trunk].
+	// Push in bottom-up order (reverse), skip current (index 0) and trunk.
+	var ancestors []string
+	for i := len(downstack) - 1; i >= 1; i-- {
+		a := g.Branches[downstack[i]]
+		if a != nil && !a.IsTrunk && !a.Frozen {
+			ancestors = append(ancestors, downstack[i])
+		}
+	}
+	if len(ancestors) > 0 && !c.Quiet {
+		fmt.Printf("Pushing %d downstack ancestor(s)\n", len(ancestors))
+	}
+	for _, name := range ancestors {
+		a := g.Branches[name]
+		if err := pushBranch(c, cfg, opts, prInfo, name, a.ParentBranchName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pushUpstack pushes all upstack dependents of current (excluding current).
+func pushUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+	upstack := g.Upstack(current)
+	if len(upstack) <= 1 {
+		return nil
+	}
+	dependents := upstack[1:] // skip current
+	if !c.Quiet {
+		fmt.Printf("Pushing %d upstack dependent(s)\n", len(dependents))
+	}
+	for _, name := range dependents {
+		ub := g.Branches[name]
+		if ub == nil || ub.IsTrunk || ub.Frozen {
+			continue
+		}
+		if err := pushBranch(c, cfg, opts, prInfo, name, ub.ParentBranchName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// offerUpstack prompts to push upstack dependents (interactive mode only).
+func offerUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+	if !c.Interactive {
+		return nil
+	}
+	upstack := g.Upstack(current)
+	if len(upstack) <= 1 {
+		return nil
+	}
+	upstackCount := len(upstack) - 1
+	yes, err := ui.Confirm(fmt.Sprintf("Push %d upstack branch(es) too?", upstackCount))
+	if err != nil {
+		return err
+	}
+	if yes {
+		return pushUpstack(c, opts, g, cfg, prInfo, current)
+	}
+	return nil
 }
 
 // pushBranch pushes a single branch to the remote and records basic metadata.
