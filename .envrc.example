@@ -1,0 +1,3 @@
+# Directory where `make link` installs the sr symlink.
+# Must be on your $PATH.
+export STACKR_LINK_DIR="${HOME}/.local/bin"

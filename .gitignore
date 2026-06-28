@@ -1,0 +1,16 @@
+# Build output
+build/
+sr
+
+# Environment
+.envrc
+
+# Codev (local config)
+.codev/
+
+# Codev
+.agent-farm/
+.consult/
+codev/.update-hashes.json
+.builders/
+.architect-role.md
