@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "branches": {
+    "master": {
+      "branchRevision": "43a12c0bc94b0ae052b73560369fdc324615c73b",
+      "children": [],
+      "isTrunk": true
+    }
+  }
+}
