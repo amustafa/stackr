@@ -21,6 +21,8 @@ var createCmd = &cobra.Command{
 			Untracked: createFlagUntracked,
 			Patch:     createFlagPatch,
 			Insert:    createFlagInsert,
+			Desc:      createFlagDesc,
+			Worktree:  createFlagWorktree,
 		}
 		if len(args) > 0 {
 			opts.Name = args[0]
@@ -35,6 +37,8 @@ var (
 	createFlagUntracked bool
 	createFlagPatch     bool
 	createFlagInsert    bool
+	createFlagDesc      string
+	createFlagWorktree  bool
 )
 
 func init() {
@@ -43,5 +47,7 @@ func init() {
 	createCmd.Flags().BoolVarP(&createFlagUntracked, "untracked", "u", false, "stage tracked file changes")
 	createCmd.Flags().BoolVarP(&createFlagPatch, "patch", "p", false, "interactive patch selection")
 	createCmd.Flags().BoolVarP(&createFlagInsert, "insert", "i", false, "insert between current and its children")
+	createCmd.Flags().StringVar(&createFlagDesc, "desc", "", "set branch description/objective")
+	createCmd.Flags().BoolVar(&createFlagWorktree, "worktree", false, "create in a worktree instead of checking out")
 	rootCmd.AddCommand(createCmd)
 }

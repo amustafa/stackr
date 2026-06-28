@@ -5,6 +5,7 @@ import (
 
 	"github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/internal/git"
+	"github.com/amustafa/stackr/internal/graph"
 )
 
 // SquashOpts holds options for squashing.
@@ -60,6 +61,16 @@ func Squash(c *context.Context, opts SquashOpts) error {
 		return err
 	}
 	b.BranchRevision = newRev
+
+	// Merge all commit contexts into the squashed commit.
+	if len(b.CommitContexts) > 0 {
+		shortRev := newRev[:min(7, len(newRev))]
+		merged := make(map[string][]graph.BranchContext)
+		for _, entries := range b.CommitContexts {
+			merged[shortRev] = append(merged[shortRev], entries...)
+		}
+		b.CommitContexts = merged
+	}
 
 	if err := c.Store.WriteGraph(g); err != nil {
 		return err

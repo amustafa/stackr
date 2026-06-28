@@ -64,13 +64,19 @@ var infoCmd = &cobra.Command{
 			}
 		}
 
-		// Show commits.
+		// Show commits and their contexts.
 		if !b.IsTrunk {
 			entries, err := ctx.Git.CommitsBetween(b.ParentBranchName, branch)
 			if err == nil && len(entries) > 0 {
 				fmt.Printf("\nCommits (%d):\n", len(entries))
 				for _, e := range entries {
-					fmt.Printf("  %s %s\n", e.SHA[:min(7, len(e.SHA))], e.Subject)
+					shortSHA := e.SHA[:min(7, len(e.SHA))]
+					fmt.Printf("  %s %s\n", shortSHA, e.Subject)
+					if commitCtxs := g.GetCommitContexts(branch, shortSHA); len(commitCtxs) > 0 {
+						for _, cc := range commitCtxs {
+							fmt.Printf("    [%s] %s\n", cc.Key, cc.Text)
+						}
+					}
 				}
 			}
 		}

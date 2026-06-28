@@ -9,9 +9,10 @@ type BranchState struct {
 	BranchRevision       string   `json:"branchRevision"`
 	Children             []string `json:"children"`
 	IsTrunk              bool     `json:"isTrunk,omitempty"`
-	Frozen               bool             `json:"frozen,omitempty"`
-	Description          string           `json:"description,omitempty"`
-	Context              []BranchContext  `json:"context,omitempty"`
+	Frozen               bool                          `json:"frozen,omitempty"`
+	Description          string                        `json:"description,omitempty"`
+	Context              []BranchContext               `json:"context,omitempty"`
+	CommitContexts       map[string][]BranchContext    `json:"commitContexts,omitempty"`
 }
 
 // Source identifies where a piece of context came from.
@@ -193,6 +194,36 @@ func (g *Graph) GetContext(branch string) []BranchContext {
 		return nil
 	}
 	return b.Context
+}
+
+// SetCommitContext adds or updates a context entry for a specific commit.
+func (g *Graph) SetCommitContext(branch, sha string, ctx BranchContext) error {
+	b, ok := g.Branches[branch]
+	if !ok {
+		return fmt.Errorf("branch %q not found", branch)
+	}
+	if b.CommitContexts == nil {
+		b.CommitContexts = make(map[string][]BranchContext)
+	}
+	entries := b.CommitContexts[sha]
+	for i, existing := range entries {
+		if existing.Key == ctx.Key {
+			entries[i] = ctx
+			b.CommitContexts[sha] = entries
+			return nil
+		}
+	}
+	b.CommitContexts[sha] = append(entries, ctx)
+	return nil
+}
+
+// GetCommitContexts returns context entries for a specific commit.
+func (g *Graph) GetCommitContexts(branch, sha string) []BranchContext {
+	b, ok := g.Branches[branch]
+	if !ok {
+		return nil
+	}
+	return b.CommitContexts[sha]
 }
 
 func removeFromSlice(s []string, val string) []string {

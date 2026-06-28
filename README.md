@@ -148,6 +148,8 @@ sr context set approach "Using JWT for stateless auth" \
 -u, --untracked   Stage tracked file changes
 -p, --patch       Interactive patch selection
 -i, --insert      Insert between current branch and its children
+    --desc        Set branch description/objective
+    --worktree    Create in a worktree instead of checking out
 ```
 
 ### Navigation
@@ -200,6 +202,29 @@ sr context set approach "Using JWT for stateless auth" \
 ```
 --source type:reference    Source reference (repeatable)
 --ticket ID                Related ticket IDs (comma-separated or repeatable)
+```
+
+### Committing
+
+| Command | Description |
+|---------|-------------|
+| `sr commit` | Commit with stackr context tracking |
+
+**`sr commit` flags:**
+
+```
+-m, --message     Commit message (required)
+-a, --all         Stage all tracked changes
+-u, --untracked   Stage tracked file changes
+-p, --patch       Interactive patch selection
+    --desc        Update branch description
+    --context     Commit context JSON blob (repeatable)
+```
+
+Context entries are structured JSON attached to individual commits:
+
+```bash
+sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing zod validation","sources":[{"type":"file","reference":"codev/plans/1-validation.md"}]}'
 ```
 
 ### Stack Operations

@@ -16,6 +16,8 @@ type CreateOpts struct {
 	Patch      bool // -p: interactive patch
 	Insert     bool // -i: insert between current and its children
 	NoVerify   bool
+	Desc       string // branch description/objective
+	Worktree   bool   // create in a worktree instead of checking out
 }
 
 // Create creates a new branch on top of the current branch.
@@ -124,8 +126,26 @@ func Create(c *context.Context, opts CreateOpts) error {
 		}
 	}
 
+	if opts.Desc != "" {
+		g.SetDescription(branchName, opts.Desc)
+	}
+
 	if err := c.Store.WriteGraph(g); err != nil {
 		return err
+	}
+
+	if opts.Worktree {
+		// Switch back to the original branch and create a worktree instead.
+		if err := c.Git.Checkout(current); err != nil {
+			return fmt.Errorf("could not switch back to %s: %w", current, err)
+		}
+		if err := WorktreeAdd(c, WorktreeAddOpts{Name: branchName}); err != nil {
+			return fmt.Errorf("worktree creation failed: %w", err)
+		}
+		if !c.Quiet {
+			fmt.Printf("Created branch %q with worktree (parent: %s)\n", branchName, current)
+		}
+		return nil
 	}
 
 	if !c.Quiet {

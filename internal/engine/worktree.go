@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -49,8 +50,14 @@ func WorktreeAdd(c *context.Context, opts WorktreeAddOpts) error {
 		return err
 	}
 
+	absWtPath := filepath.Join(root, wtPath)
+
+	if err := runPostWorktreeHook(c, absWtPath); err != nil && !c.Quiet {
+		fmt.Printf("Warning: post-worktree hook failed: %v\n", err)
+	}
+
 	if !c.Quiet {
-		fmt.Printf("Created worktree for %q at %s\n", opts.Name, filepath.Join(root, wtPath))
+		fmt.Printf("Created worktree for %q at %s\n", opts.Name, absWtPath)
 	}
 	return nil
 }
@@ -114,4 +121,26 @@ func ensureGitExclude(c *context.Context) error {
 
 	_, err = fmt.Fprintln(f, entry)
 	return err
+}
+
+// runPostWorktreeHook runs .stackr/hooks/post-worktree if it exists.
+func runPostWorktreeHook(c *context.Context, wtPath string) error {
+	hookPath := filepath.Join(c.Git.Dir, ".stackr", "hooks", "post-worktree")
+	info, err := os.Stat(hookPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&0o111 == 0 {
+		return nil
+	}
+
+	cmd := exec.Command(hookPath, wtPath)
+	cmd.Dir = c.Git.Dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }

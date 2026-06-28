@@ -49,9 +49,15 @@ Remove entries when they become stale or the branch objective changes.
 ## Core Workflow
 
     sr create <name> [-m "commit message"] [-a]    # New stacked branch
+    sr create <name> --desc "objective" --worktree  # Create with worktree
+    sr commit -a -m "message"                      # Commit with stackr tracking
+    sr commit -a -m "msg" --context '{"key":"k","text":"t"}'  # Commit with context
     sr modify [-m "message"] [-a] [-c]             # Amend and restack
     sr submit [--ai] [-d] [-s] [-f]                # Push to remote
     sr sync                                        # Fetch trunk, restack, clean merged
+
+Use sr commit instead of git commit to track commit context and keep the graph
+in sync. Context entries are JSON blobs with key, text, sources, and tickets.
 
 ## Submit (3 modes)
 
