@@ -34,12 +34,18 @@ A leaf branch — one with no dependents.
 A branch's objective — what it aims to accomplish. A single string.
 _Avoid_: title, summary
 
-**Context**:
-A branch's decision log — structured keyed entries recording why choices were made and what's related. Each entry has a key, text, optional sources, and optional ticket references.
+**Branch Context**:
+High-level decision log for the branch — why approaches were chosen, what's related. Structured keyed entries with text, sources, and ticket references. Lives on the branch in the graph. Lost on squash unless persisted to a file.
 _Avoid_: metadata (too generic), notes
+
+**Commit Context**:
+Per-step reasoning attached to individual commits via `sr commit --context`. A JSON blob of structured information explaining why a step was taken — links to plans, ADRs, tickets, or agent reasoning. Lives on the commit in the graph. Lost on squash unless persisted to a file.
 
 **Source**:
 A reference attached to a context entry identifying where it came from. Typed as file, url, ticket, or conversation.
+
+**Post-Worktree Hook**:
+A user-defined script at `.stackr/hooks/post-worktree` that runs after a worktree is created. Receives the worktree path as `$1`. Used for project-specific setup (copying `.env`, `.envrc`, editor config, etc.).
 
 **Frozen**:
 A branch excluded from automatic operations (restack, submit). No implied reason — the user decides why.
@@ -78,7 +84,8 @@ A JSON serialization of the graph at a point in time, used for undo. Taken befor
 - A **Stack** is rooted at a **Trunk** child and extends upward through the full dependency subtree
 - Every tracked branch has exactly one parent (except **Trunk**)
 - A **Frozen** branch is skipped by **Restack** and **Submit** but can still be navigated and annotated
-- **Description** answers "what" a branch does; **Context** answers "why" decisions were made
+- **Description** answers "what" a branch does; **Branch Context** answers "why" at the branch level; **Commit Context** answers "why" at the step level
+- On squash, **Branch Context** and **Commit Context** are both lost — anything that should outlive the branch must be persisted to a file by the user or agent
 - **Sync** is composed of: fetch trunk → **Restack** → prune merged (with confirmation)
 - **Submit** always pushes **Downstack** ancestors, optionally pushes **Upstack** dependents
 
@@ -93,7 +100,11 @@ A JSON serialization of the graph at a point in time, used for undo. Taken befor
 > **Dev:** "What if I just run `sr submit`?"
 > **Domain:** "Your **downstack** ancestors and your branch get pushed. Then it asks if you want to push the **upstack** too."
 
+> **Dev:** "I ran `sr commit --context '{...}'`. Where does that context live?"
+> **Domain:** "On the commit in the graph as **Commit Context**. It's there while the branch exists. If you squash, it's gone — persist anything important to a file first."
+
 ## Flagged ambiguities
 
 - **"stack" as verb vs. noun** — resolved: the noun means the dependency structure; "restack" is the operation that restores it to validity. Never use "stack" as a verb meaning "to add a branch."
 - **"rebase" vs. "restack"** — resolved: rebase is git's operation; restack is stackr's higher-level operation that coordinates multiple rebases.
+- **"context" ambiguity** — resolved: two levels exist. **Branch Context** is high-level (decisions, approach). **Commit Context** is per-step (plan references, agent reasoning). Both are structured JSON, both live in the graph, both are lost on squash.
