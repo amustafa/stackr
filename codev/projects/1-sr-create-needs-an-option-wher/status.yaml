@@ -1,9 +1,15 @@
 id: '1'
 title: sr-create-needs-an-option-wher
 protocol: spir
-phase: plan
-plan_phases: []
-current_plan_phase: null
+phase: implement
+plan_phases:
+  - id: phase_1
+    title: 'Phase 1: Core --stay Implementation'
+    status: in_progress
+  - id: phase_2
+    title: 'Phase 2: Tests'
+    status: pending
+current_plan_phase: phase_1
 gates:
   spec-approval:
     status: approved
@@ -18,7 +24,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-07-02T23:34:04.893Z'
-updated_at: '2026-07-02T23:47:38.259Z'
+updated_at: '2026-07-02T23:47:53.957Z'
