@@ -18,6 +18,7 @@ type CreateOpts struct {
 	NoVerify   bool
 	Desc       string // branch description/objective
 	Worktree   bool   // create in a worktree instead of checking out
+	Stay       bool   // create branch without checking it out
 }
 
 // Create creates a new branch on top of the current branch.
@@ -96,14 +97,21 @@ func Create(c *context.Context, opts CreateOpts) error {
 		return fmt.Errorf("branch name is required — pass it as an argument or let create generate one")
 	}
 
-	// Create and checkout the new branch.
-	if err := c.Git.CheckoutNew(branchName, ""); err != nil {
-		return err
-	}
-
-	branchRev, err := c.Git.RevParse("HEAD")
-	if err != nil {
-		return err
+	// Create the branch. --stay uses CreateBranch (no checkout); default uses CheckoutNew.
+	var branchRev string
+	if opts.Stay {
+		if err := c.Git.CreateBranch(branchName, ""); err != nil {
+			return err
+		}
+		branchRev = parentRev
+	} else {
+		if err := c.Git.CheckoutNew(branchName, ""); err != nil {
+			return err
+		}
+		branchRev, err = c.Git.RevParse("HEAD")
+		if err != nil {
+			return err
+		}
 	}
 
 	// If insert mode, reparent current branch's children to the new branch.
@@ -135,9 +143,11 @@ func Create(c *context.Context, opts CreateOpts) error {
 	}
 
 	if opts.Worktree {
-		// Switch back to the original branch and create a worktree instead.
-		if err := c.Git.Checkout(current); err != nil {
-			return fmt.Errorf("could not switch back to %s: %w", current, err)
+		if !opts.Stay {
+			// Existing worktree path: switch back to the original branch first.
+			if err := c.Git.Checkout(current); err != nil {
+				return fmt.Errorf("could not switch back to %s: %w", current, err)
+			}
 		}
 		if err := WorktreeAdd(c, WorktreeAddOpts{Name: branchName}); err != nil {
 			return fmt.Errorf("worktree creation failed: %w", err)
@@ -149,7 +159,11 @@ func Create(c *context.Context, opts CreateOpts) error {
 	}
 
 	if !c.Quiet {
-		fmt.Printf("Created branch %q on top of %q\n", branchName, current)
+		if opts.Stay {
+			fmt.Printf("Created branch %q on top of %q (stayed on %s)\n", branchName, current, current)
+		} else {
+			fmt.Printf("Created branch %q on top of %q\n", branchName, current)
+		}
 	}
 	return nil
 }
