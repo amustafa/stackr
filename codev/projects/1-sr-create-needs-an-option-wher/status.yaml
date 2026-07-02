@@ -1,7 +1,7 @@
 id: '1'
 title: sr-create-needs-an-option-wher
 protocol: spir
-phase: specify
+phase: plan
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -16,7 +16,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-07-02T23:34:04.893Z'
-updated_at: '2026-07-02T23:43:05.313Z'
+updated_at: '2026-07-02T23:43:17.192Z'
