@@ -179,6 +179,23 @@ Phase 1 ──→ Phase 2
 - [ ] Manual smoke test of all four flag combinations
 - [ ] Verify `sr log` output after each variant
 
+## Expert Review
+
+### Round 1 — Plan Consultation
+
+**Claude (APPROVE, HIGH confidence)**:
+- Plan is well-structured with full spec coverage
+- Noted test fixture setup complexity — builder should study existing test patterns for repo setup
+- No critical issues
+
+**Gemini (APPROVE, HIGH confidence)**:
+- Plan is technically sound and ready for implementation
+- Recommended setting `user.name`/`user.email` in test git repos to avoid git config warnings
+- No critical issues
+
+**Codex**: Skipped (401 auth failure). Architect approved 2/3 consultations.
+
 ## Notes
 - The pre-existing `go vet` failure in `cmd/shell_hook.go:56` is out of scope (per spec). Tests should target specific packages rather than `./...` to avoid this.
 - ADR-0006 constrains that post-worktree hooks must fire — this is automatically satisfied because `WorktreeAdd` handles hooks internally.
+- Test fixtures should set `user.name` and `user.email` in temporary repos (per Gemini recommendation).
