@@ -1,9 +1,24 @@
 id: '3'
 title: redesign-sr-get-stack-aware-re
 protocol: spir
-phase: plan
-plan_phases: []
-current_plan_phase: null
+phase: implement
+plan_phases:
+  - id: phase_1
+    title: Git Primitives
+    status: in_progress
+  - id: phase_2
+    title: Store Layer
+    status: pending
+  - id: phase_3
+    title: Engine Core
+    status: pending
+  - id: phase_4
+    title: Command Layer
+    status: pending
+  - id: phase_5
+    title: Continue Integration
+    status: pending
+current_plan_phase: phase_1
 gates:
   spec-approval:
     status: approved
@@ -18,7 +33,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-07-03T02:15:06.933Z'
-updated_at: '2026-07-03T02:36:15.393Z'
+updated_at: '2026-07-03T02:36:20.292Z'
