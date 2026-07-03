@@ -37,11 +37,14 @@ Three-phase bottom-up implementation following the codebase's existing layering:
 #### Objectives
 - Add `Init()` method to `git.Runner` that wraps `git init`
 - Add `IsHeadUnborn()` method to detect repos with no commits (for post-cancellation recovery)
+- Add `AddRemote()` method to `git.Runner` for adding remotes (origin, upstream)
 
 #### Deliverables
 - [ ] `internal/git/init.go` — `Runner.Init()` and `Runner.IsHeadUnborn()` methods
+- [ ] `Runner.AddRemote()` method added to `internal/git/remote.go`
 - [ ] Unit test for `Init()` — verify `.git` directory created
 - [ ] Unit test for `IsHeadUnborn()` — verify true on fresh repo, false after commit
+- [ ] Unit test for `AddRemote()` — verify remote appears in `git remote -v`
 
 #### Implementation Details
 
@@ -60,12 +63,22 @@ func (r *Runner) IsHeadUnborn() bool {
 }
 ```
 
-Both methods follow the existing `Runner` pattern — thin wrappers around `RunGit`/`RunGitCapture`.
+**File: `internal/git/remote.go`** (modified — add method)
+
+```go
+// AddRemote adds a named remote with the given URL.
+func (r *Runner) AddRemote(name, url string) error {
+    return r.RunGit("remote", "add", name, url)
+}
+```
+
+All methods follow the existing `Runner` pattern — thin wrappers around `RunGit`/`RunGitCapture`.
 
 #### Acceptance Criteria
 - [ ] `Runner.Init()` creates a `.git` directory in `Runner.Dir`
 - [ ] `Runner.IsHeadUnborn()` returns `true` on a freshly-inited repo (no commits)
 - [ ] `Runner.IsHeadUnborn()` returns `false` on a repo with at least one commit
+- [ ] `Runner.AddRemote()` adds a remote visible in `ListRemotes()`
 - [ ] Existing tests pass
 
 #### Test Plan
@@ -285,9 +298,19 @@ Phase 2 (ui.Form)    ───┘
 - [ ] No external docs needed — `sr init --help` already exists, behavior extends naturally
 
 ## Expert Review
-_Pending consultation via porch._
+
+### Iteration 1 — Claude review
+**Verdict**: COMMENT (HIGH confidence)
+
+Two issues raised:
+1. **(Medium) Missing `AddRemote` method**: `git.Runner` has `Push`, `Fetch`, `ListRemotes`, `RemoteBranchExists` but no `AddRemote`. Plan updated to include `Runner.AddRemote()` in Phase 1 deliverables (added to `internal/git/remote.go`).
+2. **(Low) `RunGit("init")` stdout noise**: `RunGit` forwards stdout to terminal, so `git init`'s message will print. Acceptable — the message is informative, not harmful.
+
+Gemini: skipped (agy CLI not installed)
+Codex: failed (401 Unauthorized — auth issue)
 
 ## Change Log
 | Date | Change | Reason | Author |
 |------|--------|--------|--------|
 | 2026-07-03 | Initial plan | Spec approved | Builder spir-4 |
+| 2026-07-03 | Added AddRemote deliverable | Claude review: missing git method | Builder spir-4 |
