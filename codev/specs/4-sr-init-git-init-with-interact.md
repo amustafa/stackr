@@ -48,10 +48,11 @@ A new `ui.Form` Bubble Tea model that renders all fields on one screen with tab/
 #### Interactive mode (no git repo)
 
 1. Run `git init` (via new `Runner.Init()` method)
-2. Read pre-fill values:
-   - `git config user.name` (global) → User name field
-   - `git config user.email` (global) → User email field
+2. Read pre-fill values (using `git config --get` which reads all scopes — since repo-local config is empty after init, this effectively reads global/system values):
+   - `git config user.name` → User name field
+   - `git config user.email` → User email field
    - `git config init.defaultBranch` or `"main"` → Default branch field
+   - If `--trunk` flag was provided, it overrides the default branch pre-fill (user can still edit the field)
 3. Display `ui.Form` with fields:
 
    | Field | Type | Pre-fill | Required |
@@ -70,15 +71,19 @@ A new `ui.Form` Bubble Tea model that renders all fields on one screen with tab/
    - If default branch differs from what `git init` created: `git branch -m <old> <new>`
    - If origin URL provided: `git remote add origin <url>`
    - If upstream URL provided: `git remote add upstream <url>`
-   - If `.gitignore` toggled on: create file with comprehensive defaults
-   - If `README.md` toggled on: create skeleton with directory name as title
+   - If `.gitignore` toggled on: create file with comprehensive defaults (skip if file already exists)
+   - If `README.md` toggled on: create skeleton with directory name as title (skip if file already exists)
    - Commit: if either file created, commit them; otherwise `git commit --allow-empty -m "Initial commit"`
 6. Re-run `srctx.Discover()` to pick up the newly created repo
 7. Proceed with normal stackr initialization (detect trunk, seed graph, write config)
 
-#### Interactive mode (inside existing git repo)
+#### Interactive mode (existing git repo, with commits)
 
 Unchanged. Current `cmd/init.go` behavior — detect trunk, seed graph, write config.
+
+#### Existing git repo with unborn HEAD (post-cancellation recovery)
+
+If `Discover()` succeeds (`.git` exists) but HEAD is unborn (no commits, no branches — e.g., after a previous `sr init` was cancelled), treat this as equivalent to the "no git repo" case: show the TUI form (interactive) or create an empty commit (non-interactive), then proceed with stackr init. Detection: `git rev-parse HEAD` fails when HEAD is unborn.
 
 #### Non-interactive mode (no git repo)
 
@@ -219,11 +224,32 @@ No changes to existing `internal/ui/` files (`input.go`, `confirm.go`, `selector
 6. **Trunk override**: `--trunk=develop` in empty dir → branch named `develop`
 7. **Empty fields**: Leave name/email empty → no local config written for those fields
 8. **Remote URLs**: Provide both origin and upstream → both remotes created
+9. **Cancel then re-run**: Esc during form → git repo exists with unborn HEAD. Re-run `sr init` → detects unborn HEAD, re-enters the git-init flow (shows form again)
+10. **`--trunk` pre-fills form**: `--trunk=develop` in interactive mode → form's "Default branch" field pre-filled with `develop` (user can still edit)
+11. **File conflict**: `.gitignore` already exists in directory → toggle on but file not overwritten
 
 ## Open Questions
 
-None — the issue body is comprehensive and all design decisions are settled.
+None — all design decisions are settled.
 
 ## Consultation Log
 
-_Pending first consultation via porch._
+### Iteration 1 — Claude review
+
+**Verdict**: COMMENT (HIGH confidence)
+
+Three issues raised, all addressed:
+
+1. **Post-cancellation re-run (Medium)**: After Esc, repo has unborn HEAD (no commits/branches). Re-running `sr init` would take "existing repo" path where `DefaultBranch()`/`RevParse()` fail. **Fix**: added "existing repo with unborn HEAD" flow — detect unborn HEAD via `git rev-parse HEAD` failure, re-enter git-init flow.
+
+2. **`--trunk` flag vs form field precedence (Low)**: Ambiguous whether `--trunk` locks or pre-fills. **Fix**: `--trunk` pre-fills the "Default branch" field; user can still edit it in the form.
+
+3. **File conflict (Low)**: What if `.gitignore`/`README.md` already exist. **Fix**: skip file creation if file already exists (don't overwrite).
+
+Additional notes from review:
+- `GetConfig()` reads all scopes (not just global) — clarified in spec language
+- Existing `git.Runner` methods (`SetConfig`, `RenameBranch`, `Commit`) provide good building blocks
+- `ui.Form` estimated at 150-250 lines — reasonable for a single Bubble Tea model file
+
+Gemini: skipped (agy CLI not installed)
+Codex: failed (401 Unauthorized — auth issue)
