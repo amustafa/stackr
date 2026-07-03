@@ -21,4 +21,35 @@ Starting specification for issue #3 — redesign `sr get` into a stack-aware rem
 ## Phase: Plan
 - 5 phases: git primitives → store layer → engine core → command layer → continue integration
 - Phases 1-2 parallelizable (no mutual deps)
-- Waiting for Claude plan consultation
+- Plan approved. Moving to implement.
+
+## Phase: Implement
+### Phase 1: Git Primitives — DONE
+- `internal/git/merge.go`: MergeFF, Merge, HasDiverged, MergeConflictError, IsMergeInProgress
+- 8 new tests, all passing. Claude APPROVED with HIGH confidence.
+
+### Phase 2: Store Layer — DONE
+- `internal/store/get_state.go`: GetState persistence (mirrors RebaseState)
+- `internal/store/refstore.go`: RefStore delegation
+- `internal/store/iface.go`: Backend interface extended
+- `internal/store/pr_info.go`: BranchForPR lookup
+- 2 new tests, all passing. Claude APPROVED.
+
+### Phase 3: Engine Core — DONE
+- Full rewrite of `internal/engine/get.go`: walk algorithm, per-branch sync, divergence detection
+- Target resolution: string, PR#, or current stack
+- Worktree-aware sync with stash→sync→pop cycle (fixed after review)
+- Defensive slice allocation in upstack conflict path (fixed after review)
+- cmd/get.go also rewritten (Phase 4 pulled forward for compilation)
+- 8 integration tests, all passing. Claude COMMENT (fixed stash leak + append mutation).
+
+### Phase 4: Command Layer — DONE (merged with Phase 3)
+- New flags: --downstack, -u, --worktree, --stay, -f
+- handleNavigateResult wiring, --worktree no-branch validation
+- Claude APPROVED.
+
+### Phase 5: Continue Integration — DONE
+- Extended Continue() and Abort() in conflict.go for GetState dispatch
+- continueGet: finalize merge, update graph, resume walk
+- abortGet: abort merge, clear state, return to original branch
+- Awaiting Claude review.
