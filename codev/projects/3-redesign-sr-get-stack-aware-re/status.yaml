@@ -1,7 +1,7 @@
 id: '3'
 title: redesign-sr-get-stack-aware-re
 protocol: spir
-phase: review
+phase: verify
 plan_phases:
   - id: phase_1
     title: Git Primitives
@@ -35,26 +35,10 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
-history:
-  - iteration: 1
-    plan_phase: phase_5
-    build_output: ''
-    reviews:
-      - model: gemini
-        verdict: COMMENT
-        file: >-
-          /home/amustafa/workspace/stackr/.builders/spir-3/codev/projects/3-redesign-sr-get-stack-aware-re/3-phase_5-iter1-gemini.txt
-      - model: codex
-        verdict: COMMENT
-        file: >-
-          /home/amustafa/workspace/stackr/.builders/spir-3/codev/projects/3-redesign-sr-get-stack-aware-re/3-phase_5-iter1-codex.txt
-      - model: claude
-        verdict: REQUEST_CHANGES
-        file: >-
-          /home/amustafa/workspace/stackr/.builders/spir-3/codev/projects/3-redesign-sr-get-stack-aware-re/3-phase_5-iter1-claude.txt
+build_complete: false
+history: []
 started_at: '2026-07-03T02:15:06.933Z'
-updated_at: '2026-07-03T13:44:55.325Z'
+updated_at: '2026-07-03T13:45:00.342Z'
 pr_history:
   - phase: review
     pr_number: 5
