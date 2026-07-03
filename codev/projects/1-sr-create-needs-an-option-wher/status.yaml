@@ -24,6 +24,7 @@ gates:
     approved_at: '2026-07-03T00:08:37.451Z'
   verify-approval:
     status: pending
+    requested_at: '2026-07-03T00:09:39.201Z'
 iteration: 1
 build_complete: false
 history:
@@ -60,7 +61,7 @@ history:
         file: >-
           /home/amustafa/workspace/stackr/.builders/spir-1/codev/projects/1-sr-create-needs-an-option-wher/1-phase_1-iter2-claude.txt
 started_at: '2026-07-02T23:34:04.893Z'
-updated_at: '2026-07-03T00:09:30.949Z'
+updated_at: '2026-07-03T00:09:39.201Z'
 pr_history:
   - phase: review
     pr_number: 2
