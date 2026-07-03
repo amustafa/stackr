@@ -1,0 +1,9 @@
+---
+VERDICT: COMMENT
+SUMMARY: Codex lane skipped — 401 Unauthorized (auth/infra issue)
+CONFIDENCE: LOW
+---
+
+KEY_ISSUES: None (reviewer unavailable)
+
+Skipped per architect instruction (2026-07-03): Codex auth unavailable. Claude review sufficient.
