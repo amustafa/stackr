@@ -52,4 +52,10 @@ Starting specification for issue #3 — redesign `sr get` into a stack-aware rem
 - Extended Continue() and Abort() in conflict.go for GetState dispatch
 - continueGet: finalize merge, update graph, resume walk
 - abortGet: abort merge, clear state, return to original branch
-- Awaiting Claude review.
+- Claude APPROVED. Then REQUEST_CHANGES for missing tests → tests added → APPROVED.
+
+## Phase: Review
+- Review document written at `codev/reviews/3-redesign-sr-get-stack-aware-re.md`
+- arch-critical.md updated: three-layer store pattern, navigation protocol, get/restack/sync separation
+- lessons-critical.md updated: stash pairing, Go append safety, cmd/engine coupling
+- Blocked on DNS for PR creation — will push when network recovers

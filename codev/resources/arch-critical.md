@@ -7,9 +7,10 @@ and keeps the map in sync with arch.md's top-level sections.
 STARTER: replace the examples below with YOUR project's facts and arch.md sections. -->
 
 ## Critical facts (consult before deciding)
-- <A system-shape fact that should change implementation choices — e.g. "all persistent state lives in X; never write it directly.">
-- <An invariant a contributor must not violate — e.g. "service A only talks to service B through the queue.">
-- <Keep to <=10, one line each; demote weaker facts into arch.md.>
+- Shared metadata lives in `refs/stackr/data` (ADR-0001); local-only ephemeral data (rebase state, get state, undo) lives in `.git/.stackr/`.
+- New persistent state requires three-layer update: `Store` (impl) → `RefStore` (delegation) → `Backend` (interface). Missing any layer causes compile errors.
+- Navigation uses the `NavigateResult` + `handleNavigateResult` + `__sr_cd:` protocol — subprocess prints a marker, shell wrapper intercepts and CDs.
+- `sr get` pulls from remote (no rebasing); `sr restack` does local rebasing; `sr sync` combines both. Don't conflate.
 
 ## Map of arch.md (consult when…)
 - <Top-level arch.md section> — consult when <situation>.
