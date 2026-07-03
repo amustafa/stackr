@@ -22,6 +22,11 @@ type Backend interface {
 	ClearRebaseState() error
 	HasRebaseState() bool
 
+	ReadGetState() (*GetState, error)
+	WriteGetState(gs *GetState) error
+	ClearGetState() error
+	HasGetState() bool
+
 	SaveSnapshot(operation, branch string) error
 	PopSnapshot() (*UndoEvent, []byte, error)
 }

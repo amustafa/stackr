@@ -56,6 +56,10 @@ A branch excluded from automatic operations (restack, submit). No implied reason
 Restore the stack to a valid state by rebasing each branch onto its parent. A stackr operation, not a git command.
 _Avoid_: rebase (that's the underlying git operation)
 
+**Get**:
+Pull branches from remote along the dependency path. Syncs trunk→target, then locally-existing upstack branches. Does not restack. Handles divergence by prompting or forcing. Can pause mid-walk on merge conflicts for `sr continue`.
+_Avoid_: pull, fetch (those are git operations)
+
 **Sync**:
 The full "catch up with the world" sequence: fetch trunk, restack, and prune merged branches. Pruning requires confirmation. Can pause mid-way on conflicts.
 

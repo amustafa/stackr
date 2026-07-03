@@ -1,0 +1,132 @@
+I'll start by reading the actual codebase to ground my review in reality — let me check the existing implementation, types, and patterns referenced in the spec.`★ Insight ─────────────────────────────────────`
+**Spec review grounding**: The explorer agent confirmed that every pattern this spec references — `NavigateResult`, `RebaseState`, `TryPullMeta`, `Runner`, `PRInfo` — exists and is mature in the codebase. This is critical for a spec review: a beautifully written spec that references non-existent infrastructure is worse than a rough spec that builds on real foundations. This one builds on real foundations.
+`─────────────────────────────────────────────────`
+
+Now let me read a few specific files the explorer summarized to verify some details I want to check more closely — particularly around the existing `get.go`, the `RebaseState` type, and the continue flow:Good — I've confirmed `IsAncestor` exists but `Merge` does not. Let me check one more thing the spec assumes:Now let me check the graph's `Downstack` function and the existing `Sync` definition:Excellent. I now have a thorough understanding of the codebase. Let me read the full Sync to understand the current "Sync" semantics the spec claims not to modify:`★ Insight ─────────────────────────────────────`
+**Key finding for the review**: The existing `Sync` function does `fetch → pull meta → ff trunk → clean merged → restack`. The spec claims `sr sync = pull from remote + restack` — and proposes `sr get = pull from remote only (no restack)`. But looking at the actual `Sync` code, it also prunes merged branches. The spec's clean separation story is slightly simplified vs reality, but that's fine — the spec explicitly says "must not modify `sr sync` semantics."
+`─────────────────────────────────────────────────`
+
+Now I have the full picture. Let me also check if the existing `Downstack()` returns branches in the order the spec expects (target→trunk, or trunk→target):Good. Now I have everything I need. Let me compile my review.
+
+---
+
+`★ Insight ─────────────────────────────────────`
+**Why read the code before reviewing a spec?** A common failure mode in spec reviews is flagging "issues" that are actually already handled by existing infrastructure, or conversely, approving patterns that don't match how the codebase actually works. By grounding in the real `NavigateResult`, `RebaseState`, `Downstack()`, `IsAncestor()`, and `Sync()` implementations, I can distinguish real gaps from phantom concerns.
+`─────────────────────────────────────────────────`
+
+---
+
+## Specification Review: Spec 3 — Redesign `sr get` — Stack-Aware Remote Sync
+
+### 1. Completeness
+
+**Strong.** The spec covers the algorithm, flags, state management, return types, edge cases, and verification scenarios comprehensively. The separation of concerns (get = pull, restack = local rebase, sync = both) is clearly articulated and consistent with the existing `Sync()` implementation.
+
+**Issues found:**
+
+**A. `Downstack()` ordering mismatch.** The spec says the walk path is "trunk to target." The existing `Downstack()` function returns **target to trunk** (it walks `ParentBranchName` upward). The implementation will need to reverse it. This isn't a spec defect per se — the algorithm is correct — but the spec should note that the existing `Downstack()` returns the reverse order, or name the new ordering explicitly (e.g., "walk path = reversed `Downstack()`"). A builder who reads "compute the walk path" and calls `Downstack()` directly will iterate in the wrong direction.
+
+**B. Frozen branches on the walk path.** The spec doesn't mention what happens when a **Frozen** branch appears in the downstack walk. Per ubiquitous language, frozen branches are "excluded from automatic operations." Should `sr get` skip syncing a frozen branch? Error? Sync it anyway (since Get is explicit, not automatic)? This needs a decision.
+
+**C. `--restack` flag removal not addressed.** The current `sr get` has a `--restack` flag. The spec's new design removes it (the flags table doesn't include it). The spec should explicitly state that `--restack` is removed and why — the clean separation means restacking after get is now `sr restack`'s job. Without this, a builder might accidentally preserve backward compatibility.
+
+**D. Missing: What does `sr get` do when already in a rebase/conflict state?** The existing `Continue()` function checks `HasRebaseState()`. If a user runs `sr get` while a previous `sr restack` conflict is unresolved, what happens? The spec should state: "Error if `HasRebaseState()` is true" (same as other operations).
+
+**E. `Track()` call semantics changed.** Current `Get()` calls `Track(c, branch, "", true)` with parent="" (defaults to trunk). The new design discovers parents from the shared graph. The spec should clarify that `Track()` is no longer called for branches already in the graph, only for remote-only branches being created locally.
+
+### 2. Correctness
+
+**Solid.** The core algorithm is sound and the per-branch sync logic correctly uses `IsAncestor` (which exists in the codebase at `internal/git/refs.go`).
+
+**Issues found:**
+
+**F. "Merge" option requires new infrastructure.** The spec lists `git merge` as a divergence resolution option. There is no `Merge()` function on `Runner` today (only `MergeBase` and `IsMergedInto`). The spec's "Files to Modify" table says "New helpers: `MergeFF`, `Merge`, `HasDiverged`" — this is correct, but the spec should note this is net-new git infrastructure, not just wiring.
+
+**G. Graph update after sync.** The per-branch sync logic updates the git ref (fast-forward or reset), but the spec doesn't explicitly state that `BranchRevision` and `ParentBranchRevision` in the graph should be updated. The existing `Continue()` function does this. The spec's algorithm section should include a "update graph state" step after each branch sync.
+
+**H. Upstack default behavior vs. `--downstack`.** The spec says by default (no flags) "also sync any locally existing branches upstack of the target." But `Upstack()` returns a BFS tree — if the upstack forks, you'd sync all forks. This is probably correct but should be explicitly stated: "Default syncs all locally-existing upstack branches, including forks."
+
+### 3. Feasibility
+
+**High.** Every referenced pattern (`NavigateResult`, `RebaseState`, `TryPullMeta`, `IsAncestor`, `Downstack`, `WorktreeForBranch`) exists and is mature. The main new pieces are:
+- `GetState` struct (follows `RebaseState` pattern)
+- `Merge` / `MergeFF` git helpers (straightforward)
+- PR number → branch name lookup (straightforward given `PRInfo` store exists)
+- Extended `Continue()` dispatch for "get" operations
+
+All feasible without architectural changes.
+
+**One concern:** The `Continue()` function currently hard-codes rebase-specific logic (`git rebase --continue`, update `BranchRevision`). Extending it to handle "get" operations means the function needs operation-type dispatch. The spec mentions this in the Files to Modify table but should clarify the dispatch pattern — does `Continue()` switch on `rs.Operation`, or do we introduce per-operation continue functions?
+
+### 4. Clarity
+
+**Good overall.** A builder would understand what to build. The algorithm pseudocode, flag table, and verification scenarios are excellent.
+
+**Minor clarity issues:**
+
+**I. `GetResult` vs `GetState` naming.** `GetResult` is the return type (success path). `GetState` is pause/resume state (conflict path). These are clear but close in name — fine for Go, just noting.
+
+**J. "Branch not in graph" flow.** The spec lists three options (skip tracking, infer from PR base, stack on trunk) but doesn't specify the prompt text or what happens in non-interactive mode. For `--force`, the spec says "always replace with remote" but doesn't say how to handle an untracked branch in force mode. Suggest: default to stack-on-trunk in non-interactive/force mode.
+
+### 5. Edge Cases
+
+**Well-covered by verification scenarios.** A few additions:
+
+**K. Trunk itself diverged from remote.** The walk path starts at trunk. If the local trunk has diverged from remote trunk, the per-branch sync logic would prompt. But trunk divergence is unusual and potentially dangerous to "replace with remote." The spec should either skip trunk (since `sr sync` handles trunk) or add a specific note about trunk handling.
+
+**L. Deleted remote branch.** What if a branch is in the graph but has been deleted on remote? The spec covers "remote-only branch" but not "graph-tracked branch that no longer exists on remote." Should it skip with a warning? Remove from graph?
+
+### 6. Security Considerations
+
+**No concerns.** This is a local git operation. The `gh pr view` fallback for PR resolution is the only external call, and it's read-only.
+
+### 7. Testing Strategy
+
+The 17 verification scenarios are solid and cover the main paths. Missing:
+- Frozen branch on walk path
+- Trunk divergence
+- Branch deleted on remote
+- Non-interactive mode for all prompts (CI/scripting)
+
+### 8. Ubiquitous Language Alignment
+
+The spec's "Files to Modify" table correctly includes updating `UBIQUITOUS_LANGUAGE.md` with the **Get** operation. The definition should align with the existing **Sync** definition pattern:
+
+> **Get**: Pull branches from remote along the dependency path. Syncs trunk→target, then locally-existing upstack. Does not restack.
+> _Avoid_: pull, fetch (those are git operations)
+
+---
+
+### Summary of Issues
+
+| # | Severity | Issue |
+|---|----------|-------|
+| A | Minor | `Downstack()` returns target→trunk, spec says trunk→target — note the reversal |
+| B | **Medium** | Frozen branches on the walk path: unspecified behavior |
+| C | Minor | `--restack` flag removal not explicitly stated |
+| D | **Medium** | Behavior when an existing rebase state exists: unspecified |
+| E | Minor | `Track()` call semantics changed but not explicitly noted |
+| F | Minor | New `Merge` git helper is net-new infrastructure (acknowledged in files table) |
+| G | **Medium** | Graph state update (`BranchRevision`) after each sync step not specified |
+| H | Minor | Upstack fork behavior in default mode should be explicit |
+| J | Minor | Non-interactive/force behavior for untracked branches unspecified |
+| K | Minor | Trunk divergence from remote: edge case |
+| L | Minor | Remote-deleted branch: edge case |
+
+---
+
+```
+---
+VERDICT: COMMENT
+SUMMARY: Well-structured spec with strong algorithm design; three medium-severity gaps (frozen branches, existing rebase state guard, graph state updates) should be addressed but don't block human review.
+CONFIDENCE: HIGH
+---
+KEY_ISSUES:
+- (B) Frozen branches on the walk path have unspecified behavior — decide whether to skip, error, or sync them
+- (D) Missing guard: what happens if `sr get` is run while an existing rebase conflict is unresolved (`HasRebaseState()` is true)?
+- (G) Per-branch sync should explicitly include updating `BranchRevision` / `ParentBranchRevision` in the graph after each sync step — the existing `Continue()` does this and it's easy to miss
+```
+
+`★ Insight ─────────────────────────────────────`
+**Why COMMENT and not REQUEST_CHANGES?** The three medium issues are real gaps, but they're all "decide and add a line" fixes — not fundamental design problems. A builder reading this spec would likely handle (D) naturally (it's standard guard-clause practice), would discover (G) when implementing (since `Continue()` already does it), and (B) is a genuine design question but has an obvious default (sync frozen branches since `sr get` is explicit). None of these require restructuring the algorithm or rethinking the approach.
+`─────────────────────────────────────────────────`

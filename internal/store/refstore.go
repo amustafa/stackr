@@ -157,6 +157,22 @@ func (rs *RefStore) HasRebaseState() bool {
 	return rs.local.HasRebaseState()
 }
 
+func (rs *RefStore) ReadGetState() (*GetState, error) {
+	return rs.local.ReadGetState()
+}
+
+func (rs *RefStore) WriteGetState(state *GetState) error {
+	return rs.local.WriteGetState(state)
+}
+
+func (rs *RefStore) ClearGetState() error {
+	return rs.local.ClearGetState()
+}
+
+func (rs *RefStore) HasGetState() bool {
+	return rs.local.HasGetState()
+}
+
 func (rs *RefStore) SaveSnapshot(operation, branch string) error {
 	// Save the current graph from refs as a local file snapshot.
 	g, err := rs.ReadGraph()

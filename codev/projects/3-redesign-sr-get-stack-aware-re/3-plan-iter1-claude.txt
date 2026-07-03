@@ -1,0 +1,94 @@
+I'll review this plan by first verifying the claims against the actual codebase. Let me read the key files referenced in the plan.Now let me check the `continue` flow and how the `cmd` layer currently handles it:Now let me check the existing `engine.Continue` function:Now let me check one more important detail — where `GetState` should live (the plan mentions both `internal/store/get_state.go` and `internal/engine/get_state.go`):Let me check the `Store` type vs `Backend` interface — the plan puts `GetState` on `Store` but talks about updating `Backend`:Good. Now I have a thorough understanding of the codebase. Let me also check the `context.Context` to understand how the store is accessed:Now I have a comprehensive picture. Let me compile my review.
+
+`★ Insight ─────────────────────────────────────`
+**Store Architecture**: This codebase has a two-layer store: `Store` (local filesystem under `.git/.stackr/` for ephemeral data like rebase state) and `RefStore` (shared metadata in git refs per ADR-0001). The `Backend` interface on `context.Context` points to `RefStore`, which delegates local operations to its embedded `Store`. This delegation pattern is critical to understand — new `GetState` methods need to be added at **three** levels: `Store` (implementation), `RefStore` (delegation), and `Backend` (interface).
+`─────────────────────────────────────────────────`
+
+---
+
+## Plan Review: Redesign `sr get` — Stack-Aware Remote Sync
+
+I've read the plan, the spec, and the actual codebase files referenced. Here's my assessment across the requested dimensions.
+
+### 1. Spec Coverage
+
+**Good coverage overall.** The 5 phases map to the spec's requirements well. All 21 verification scenarios are tracked in success metrics. The algorithm in Phase 3 follows the spec's 7-step algorithm faithfully.
+
+**One spec requirement has incomplete coverage:**
+
+- **Spec verification scenario #1 ("New branch from remote")** describes creating a branch that doesn't exist locally yet. The Phase 3 algorithm (step 6, per-branch sync loop) says "Check if branch exists on remote; skip with warning if not" — but doesn't explicitly describe the case where the branch exists on remote but *not locally*. The current `Get()` handles this (creates local tracking branch), and the new algorithm needs to as well. The plan's per-branch sync logic only covers `local_rev` vs `remote_rev` comparison, which implicitly requires the branch to exist locally. The `Created` field in `GetResult` suggests this is intended, but the plan doesn't describe the "create local branch from remote" path in the per-branch sync loop.
+
+### 2. Implementation Approach & Architecture
+
+**Strong bottom-up layering.** The dependency graph (Phases 1+2 parallel → Phase 3 → Phases 4+5) is clean and correct.
+
+**Issue A: `GetState` — Structural Confusion**
+
+The plan has a contradiction about where `GetState` lives:
+
+- Phase 2 deliverables say `internal/store/get_state.go` (with methods on `Store`)
+- Phase 2 deliverables also say update `internal/store/iface.go` (the `Backend` interface)
+- The spec lists *both* `internal/engine/get_state.go` and `internal/store/get_state.go`
+
+Looking at the codebase, `RebaseState` is defined in `internal/store/rebase_state.go` with methods on `Store`. The `RefStore` delegates via `rs.local.ReadRebaseState()` etc. The `Backend` interface includes the four rebase state methods.
+
+So for `GetState`, the plan correctly places it in `internal/store/get_state.go`, but **doesn't mention** that `RefStore` also needs delegation methods (matching `refstore.go` lines 144-158 pattern). The plan says "extend `Backend` interface" but doesn't mention `RefStore` as a file to modify. A builder following this plan would add the `Backend` interface methods but miss the `RefStore` delegation layer, causing a compile error.
+
+**Recommendation**: Add `internal/store/refstore.go` to Phase 2 deliverables — add `ReadGetState`, `WriteGetState`, `ClearGetState`, `HasGetState` delegation methods.
+
+**Issue B: `BranchForPR` placement**
+
+The plan says add `BranchForPR` to `internal/store/pr_info.go`. But `PRInfo` is a data struct — it has no methods today. The existing read pattern is `c.Store.ReadPRInfo()` which returns `*PRInfo`. Adding a method on `PRInfo` is fine, but the plan should clarify: is this `func (p *PRInfo) BranchForPR(number int) string` (a method on the struct) or is it on `Store`/`RefStore`? Given that `PRInfo` is a simple struct with no receiver methods today, a method on `*PRInfo` is the cleanest. The plan's wording "add `BranchForPR(number int) string` lookup method" to `pr_info.go` is acceptable but could be clearer for a builder.
+
+**Issue C: `Continue()` already exists**
+
+The plan says "The current `Continue()` function doesn't exist as an engine function" — this is **incorrect**. `internal/engine/conflict.go` defines `func Continue(c *context.Context) error`. The plan should say "extend the existing `Continue()` in `conflict.go`" rather than "create a proper `Continue()`". The plan's Phase 5 deliverables list `internal/engine/continue.go` as a new file, but the logic should go in `conflict.go` where `Continue` already lives. A builder following the plan literally would create a duplicate function.
+
+### 3. Task Breakdown & Ordering
+
+**Well-structured.** Phases are appropriately sized:
+- Phase 1 (git primitives) — small, focused, testable in isolation ✓
+- Phase 2 (store layer) — small, focused, parallel with Phase 1 ✓  
+- Phase 3 (engine core) — correctly identified as the largest/most complex ✓
+- Phase 4 (command layer) — mostly wiring, appropriately thin ✓
+- Phase 5 (continue integration) — correctly depends on Phase 2+3 ✓
+
+**Minor concern**: Phase 3 is quite large. It contains target resolution, walk computation, per-branch sync, worktree handling, upstack sync, AND conflict state. A builder might benefit from sub-phase guidance (e.g., "implement walk + simple fast-forward first, then add divergence handling, then worktree awareness"). But this is a suggestion, not a blocker.
+
+### 4. Testing Strategy
+
+**Adequate but lean on integration tests.** Phase 3 says "End-to-end with real git repos" but doesn't describe *how* to set up multi-branch stack test fixtures. Phase 4 says "Manual Testing" for flag combinations, which is a red flag — there should be at least basic integration tests for the command layer's arg parsing.
+
+Phase 5 testing is good — it describes the exact scenario (create conflict → resolve → continue → verify walk resumes).
+
+### 5. Risk Assessment
+
+**Identified risks are reasonable.** One risk I'd add:
+
+**Missing risk: `MergeConflictError` type doesn't exist.** Phase 1 says `Merge` returns a `MergeConflictError` on conflict, but this error type doesn't exist in the codebase. The plan should note this needs to be created (likely in `internal/git/` or `internal/errors/`). It's trivially implemented but a builder shouldn't have to guess.
+
+### 6. Other Observations
+
+**`MergeFF` implementation detail is sound.** Using `git update-ref` for non-checked-out branches and `git merge --ff-only` for the current branch is the right approach. The plan correctly identifies this nuance.
+
+**Graph `BranchRevision` updates are correctly specified** in Phase 3 step 6. The restack code (lines 107-112 of `restack.go`) shows the pattern: update `b.BranchRevision` and `b.ParentBranchRevision` after each branch operation. The plan matches this.
+
+**`Downstack` return order is correctly noted.** The plan says "reverse to get trunk→target" which matches the code: `Downstack()` walks from `name` up to trunk (so returns `[target, ..., trunk]`).
+
+**Abort handling is missing.** The spec doesn't mention `sr abort` for `GetState`, but the existing `Abort()` in `conflict.go` only handles `RebaseState`. Phase 5 or a follow-up should extend `Abort()` to handle `GetState` as well — otherwise a user who gets a merge conflict during `sr get` and wants to bail out has no clean path. This is worth a COMMENT but not a blocker since the spec itself doesn't mention it.
+
+---
+
+```
+---
+VERDICT: COMMENT
+SUMMARY: Plan is solid and well-layered; three correctness issues need fixing before a builder can follow it without ambiguity
+CONFIDENCE: HIGH
+---
+KEY_ISSUES:
+- (A) RefStore delegation layer missing from Phase 2 deliverables — GetState methods need Store + RefStore + Backend interface updates (builder will hit compile error)
+- (B) Phase 5 incorrectly states Continue() doesn't exist — it's in conflict.go, not a new file; builder would create a duplicate
+- (C) Phase 3 per-branch sync loop doesn't describe the "branch exists on remote but not locally" creation path (verification scenario #1)
+- (Minor) MergeConflictError type needs to be created — not noted anywhere
+- (Minor) Abort() for GetState not addressed (user recovery path for mid-get conflict abandonment)
+```
