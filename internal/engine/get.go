@@ -289,7 +289,8 @@ func syncOneBranch(c *context.Context, g *graph.Graph, cfg *store.Config, branch
 
 	isLocalAnc, _ := c.Git.IsAncestor(localRev, remoteRev)
 	if isLocalAnc {
-		if err := handleWorktreeBranch(c, branch); err != nil {
+		stashed, err := handleWorktreeBranch(c, branch)
+		if err != nil {
 			if !c.Quiet {
 				fmt.Printf("  %s: skipped (worktree: %v)\n", branch, err)
 			}
@@ -297,6 +298,11 @@ func syncOneBranch(c *context.Context, g *graph.Graph, cfg *store.Config, branch
 		}
 		if err := c.Git.MergeFF(branch, remoteRef); err != nil {
 			return 0, err
+		}
+		if stashed {
+			if err := unstashWorktreeBranch(c, branch); err != nil && !c.Quiet {
+				fmt.Printf("  %s: warning: %v\n", branch, err)
+			}
 		}
 		newRev, _ := c.Git.RevParse(branch)
 		if b := g.Branches[branch]; b != nil {
@@ -401,7 +407,58 @@ func mergeFromRemote(c *context.Context, g *graph.Graph, branch, remoteRef strin
 	return syncActionSynced, nil
 }
 
-func handleWorktreeBranch(c *context.Context, branch string) error {
+// handleWorktreeBranch checks if a branch is checked out in a worktree with dirty state.
+// Returns (stashed, error). If stashed is true, the caller must call unstashWorktreeBranch
+// after syncing to restore the user's changes.
+func handleWorktreeBranch(c *context.Context, branch string) (stashed bool, err error) {
+	wtPath, err := c.Git.WorktreeForBranch(branch)
+	if err != nil || wtPath == "" {
+		return false, nil
+	}
+
+	absPath := wtPath
+	if !filepath.IsAbs(absPath) {
+		absPath = filepath.Join(c.Git.Dir, absPath)
+	}
+
+	wtRunner := *c.Git
+	wtRunner.Dir = absPath
+
+	dirty, err := wtRunner.IsDirty()
+	if err != nil {
+		return false, nil
+	}
+	if !dirty {
+		return false, nil
+	}
+
+	if !c.Interactive {
+		return false, fmt.Errorf("dirty worktree at %s", absPath)
+	}
+
+	choice, err := ui.Select(
+		fmt.Sprintf("Worktree for %q at %s has uncommitted changes.", branch, absPath),
+		[]string{
+			"Stash and continue",
+			"Skip this branch",
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+
+	if choice == "Skip this branch" {
+		return false, fmt.Errorf("skipped by user")
+	}
+
+	if err := wtRunner.StashPush("sr get: stash for sync of " + branch); err != nil {
+		return false, fmt.Errorf("stash failed: %w", err)
+	}
+
+	return true, nil
+}
+
+func unstashWorktreeBranch(c *context.Context, branch string) error {
 	wtPath, err := c.Git.WorktreeForBranch(branch)
 	if err != nil || wtPath == "" {
 		return nil
@@ -415,37 +472,9 @@ func handleWorktreeBranch(c *context.Context, branch string) error {
 	wtRunner := *c.Git
 	wtRunner.Dir = absPath
 
-	dirty, err := wtRunner.IsDirty()
-	if err != nil {
-		return nil
+	if err := wtRunner.StashPop(); err != nil {
+		return fmt.Errorf("stash pop in worktree %s failed (changes saved in stash): %w", absPath, err)
 	}
-	if !dirty {
-		return nil
-	}
-
-	if !c.Interactive {
-		return fmt.Errorf("dirty worktree at %s", absPath)
-	}
-
-	choice, err := ui.Select(
-		fmt.Sprintf("Worktree for %q at %s has uncommitted changes.", branch, absPath),
-		[]string{
-			"Stash and continue",
-			"Skip this branch",
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	if choice == "Skip this branch" {
-		return fmt.Errorf("skipped by user")
-	}
-
-	if err := wtRunner.StashPush("sr get: stash for sync of " + branch); err != nil {
-		return fmt.Errorf("stash failed: %w", err)
-	}
-
 	return nil
 }
 
@@ -484,7 +513,10 @@ func syncUpstack(c *context.Context, g *graph.Graph, cfg *store.Config, target, 
 		action, err := syncOneBranch(c, g, cfg, branch, opts)
 		if err != nil {
 			if gitpkg.IsMergeConflict(err) {
-				allBranches := append(computeWalkPath(g, target), upstack[1:]...)
+				downPath := computeWalkPath(g, target)
+				allBranches := make([]string, 0, len(downPath)+len(upstack)-1)
+				allBranches = append(allBranches, downPath...)
+				allBranches = append(allBranches, upstack[1:]...)
 				saveGetState(c, origBranch, target, allBranches, result.Synced, branch, opts)
 				result.Conflicts = true
 				fmt.Printf("\nMerge conflict on %s (upstack). Resolve conflicts, then run `sr continue`.\n", branch)
