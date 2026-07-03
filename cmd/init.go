@@ -22,6 +22,8 @@ var initCmd = &cobra.Command{
 	RunE:  runInit,
 }
 
+var errInitCancelled = errors.New("init cancelled")
+
 var (
 	initFlagTrunk string
 	initFlagReset bool
@@ -52,7 +54,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("git init failed: %w", err)
 		}
 		if err := bootstrapRepo(runner, cwd); err != nil {
+			if errors.Is(err, errInitCancelled) {
+				return nil
+			}
 			return err
+		}
+		if initFlagTrunk == "" {
+			if branch, _ := runner.CurrentBranch(); branch != "" {
+				initFlagTrunk = branch
+			}
 		}
 		c, err = srctx.Discover(cwd, flagDebug, flagInteractive)
 		if err != nil {
@@ -65,7 +75,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	default:
 		if c.Git.IsHeadUnborn() {
 			if err := bootstrapRepo(c.Git, cwd); err != nil {
+				if errors.Is(err, errInitCancelled) {
+					return nil
+				}
 				return err
+			}
+			if initFlagTrunk == "" {
+				if branch, _ := c.Git.CurrentBranch(); branch != "" {
+					initFlagTrunk = branch
+				}
 			}
 		}
 	}
@@ -161,8 +179,8 @@ func bootstrapInteractive(runner *git.Runner, cwd string) error {
 	result, err := ui.Form("Initialize Git Repository", fields)
 	if err != nil {
 		if errors.Is(err, ui.ErrCancelled) {
-			fmt.Println("Init cancelled. Git repository created but stackr not initialized.")
-			os.Exit(0)
+			fmt.Fprintln(os.Stderr, "Init cancelled. Git repository created but stackr not initialized.")
+			return errInitCancelled
 		}
 		return err
 	}

@@ -227,3 +227,32 @@ func TestApplyFormResultAddsRemotes(t *testing.T) {
 		t.Fatalf("expected 2 remotes, got %d: %v", len(remotes), remotes)
 	}
 }
+
+func TestApplyFormResultCustomBranch(t *testing.T) {
+	dir := t.TempDir()
+	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r.Init()
+	r.RunGit("config", "user.email", "test@test.com")
+	r.RunGit("config", "user.name", "Test")
+
+	result := &ui.FormResult{
+		Values:  map[string]string{"name": "", "email": "", "branch": "develop", "origin": "", "upstream": ""},
+		Toggles: map[string]bool{"gitignore": false, "readme": false},
+	}
+
+	if err := applyFormResult(r, dir, result); err != nil {
+		t.Fatalf("applyFormResult: %v", err)
+	}
+
+	branch, err := r.CurrentBranch()
+	if err != nil {
+		t.Fatalf("CurrentBranch: %v", err)
+	}
+	if branch != "develop" {
+		t.Fatalf("expected branch 'develop', got %q", branch)
+	}
+
+	if r.IsHeadUnborn() {
+		t.Fatal("should have created a commit")
+	}
+}
