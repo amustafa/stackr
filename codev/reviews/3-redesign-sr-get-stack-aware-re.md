@@ -43,7 +43,7 @@ Redesigned `sr get` from a simple "fetch one branch" command into a stack-aware 
 
 3. **Codex/Gemini unavailability**: 2 of 3 consultation reviewers were down throughout (Codex: 401 auth, Gemini: agy CLI missing). Claude was the only active reviewer.
 
-## Lessons Learned
+## Lessons Learned Updates
 
 1. **Stash operations need paired pop**: When stashing user changes as part of an automated operation, the contract is "I'll give them back." A stash without a pop is a data safety bug. Always design stash as a push/pop pair with the sync in between.
 
