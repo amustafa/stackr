@@ -1,7 +1,7 @@
 id: '4'
 title: sr-init-git-init-with-interact
 protocol: spir
-phase: specify
+phase: plan
 plan_phases: []
 current_plan_phase: null
 gates:
@@ -16,7 +16,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-07-03T02:59:21.593Z'
-updated_at: '2026-07-03T13:15:38.562Z'
+updated_at: '2026-07-03T13:15:43.292Z'
