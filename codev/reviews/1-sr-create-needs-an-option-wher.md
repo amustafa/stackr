@@ -40,7 +40,7 @@ Added `--stay` flag to `sr create` that creates a branch without checking it out
 | `--stay --insert` reparents correctly | Verified (test + manual) |
 | Output messages indicate stay | Verified (manual) |
 
-## Architecture Documentation Updates
+## Architecture Updates
 
 No architecture changes needed. This is a small feature addition that doesn't alter system shape or introduce new invariants. ADR-0006 (worktree hooks) was consulted and confirmed satisfied — `WorktreeAdd` handles hooks internally.
 
