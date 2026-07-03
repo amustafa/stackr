@@ -29,6 +29,8 @@ Without this separation, users who want to pull a colleague's branch must manual
 - Must reuse existing navigation pattern (`NavigateResult` + `handleNavigateResult` + `__sr_cd:`)
 - Must reuse existing pause/resume pattern (`RebaseState` via `sr continue`)
 - Must not modify `sr restack` or `sr sync` semantics (those are separate concerns)
+- Must guard against concurrent state: error if `HasRebaseState()` is true (existing rebase/get conflict in progress)
+- The old `--restack` flag is removed — restacking after get is now `sr restack`'s job
 
 ## Solution Design
 
@@ -40,14 +42,21 @@ sr get [branch|PR#] [flags]
 ### Core Algorithm: Downstack Walk + Sync
 
 Given a target branch, the algorithm:
-1. Resolves the target (branch name, PR number, or current stack)
-2. Computes the **walk path**: ordered list of branches from trunk to target
-3. For each branch on the path, performs a **per-branch sync**:
+1. Guard: error if `HasRebaseState()` is true (resolve existing conflict first)
+2. Fetch from remote, pull shared metadata (`TryPullMeta`)
+3. Resolves the target (branch name, PR number, or current stack)
+4. Computes the **walk path**: `Downstack(target)` returns target→trunk; reverse it to get trunk→target order
+5. For each branch on the path (skipping trunk itself), performs a **per-branch sync**:
+   - Skip if branch is trunk (trunk sync is `sr sync`'s job)
+   - Skip if branch doesn't exist on remote (local-only branch)
    - Fast-forward if remote is strictly ahead
    - Skip if already up-to-date
    - Prompt on divergence (replace with remote / keep local / merge)
-4. Optionally syncs local upstack branches (beyond the target)
-5. Navigates to the target branch (checkout or worktree CD)
+   - **Update graph**: set `BranchRevision` to the new HEAD after sync
+6. Optionally syncs local upstack branches (beyond the target), including all forks
+7. Navigates to the target branch (checkout or worktree CD)
+
+**Frozen branches**: `sr get` is an explicit user-initiated operation, not automatic — frozen branches on the walk path are synced normally. Frozen only excludes branches from `sr restack` and `sr submit`.
 
 ### Per-Branch Sync Logic
 For each branch on the walk path:
@@ -79,16 +88,17 @@ With `--force`: always replace with remote, no prompts.
 3. If both branch name and PR number are provided and conflict, PR number wins
 
 **Branch not in graph** (remote-only branch not yet tracked):
-1. Pull shared metadata first (`TryPullMeta`)
+1. Shared metadata was already pulled at the start; check the refreshed graph
 2. If branch appears in the refreshed graph, use its stack position
-3. If still not in graph, prompt: skip tracking, infer stack from PR base, or stack on trunk
+3. If still not in graph and interactive: prompt — skip tracking, infer stack from PR base, or stack on trunk
+4. If still not in graph and non-interactive (`--force`): default to stacking on trunk
 
 **No argument** (`sr get` with no branch):
 - Sync the current stack: walk the current branch's downstack path, then sync upstack branches that exist locally
 
 ### Upstack Behavior
 
-- **Default** (no flags): After syncing trunk→target, also sync any **locally existing** branches upstack of the target
+- **Default** (no flags): After syncing trunk→target, also sync any **locally existing** branches upstack of the target (including all forks — `Upstack()` returns BFS over the full subtree)
 - **`--downstack`**: Only sync trunk→target, skip all upstack branches
 - **`--remote-upstack` / `-u`**: Also pull upstack branches that **only exist on remote** (creating them locally and tracking them)
 
@@ -164,7 +174,8 @@ The cmd layer uses `handleNavigateResult` to emit `__sr_cd:` for worktree naviga
 | `internal/engine/get_state.go` (new) | `GetState` struct and store read/write/clear methods |
 | `internal/git/git.go` or new file | New helpers: `MergeFF`, `Merge`, `HasDiverged` |
 | `internal/store/pr_info.go` | PR number → branch name lookup helper |
-| `internal/engine/continue.go` (new or extend) | Handle "get" operation in `sr continue` |
+| `internal/engine/continue.go` (new or extend) | Handle "get" operation in `sr continue`; dispatch on `rs.Operation` field |
+| `internal/store/get_state.go` (new) | `GetState` store read/write/clear — mirrors `RebaseState` pattern |
 | `codev/UBIQUITOUS_LANGUAGE.md` | Add **Get** operation term |
 
 ## Open Questions
@@ -224,6 +235,24 @@ The cmd layer uses `handleNavigateResult` to emit `__sr_cd:` for worktree naviga
 | 15 | Worktree no branch | `sr get --worktree` | Error: branch required |
 | 16 | Up-to-date | `sr get feature-x` (already synced) | Skips, reports up-to-date |
 | 17 | Local ahead | `sr get feature-x` (local ahead of remote) | Skips (nothing to pull) |
+| 18 | Existing rebase state | `sr get feature-x` while rebase in progress | Error: resolve existing conflict first |
+| 19 | Frozen branch on path | walk path includes frozen branch | Synced normally (get is explicit) |
+| 20 | Branch deleted on remote | `sr get feature-x` (graph-tracked but remote-deleted) | Skip with warning |
+| 21 | Upstack with forks | `sr get feature-x` (upstack forks) | Syncs all fork branches |
 
 ## Consultation Log
-*(To be populated during multi-agent review)*
+
+### Iteration 1 — Claude Review (COMMENT, HIGH confidence)
+**Key feedback addressed:**
+- **(B) Frozen branches**: Added explicit statement that frozen branches are synced normally since `sr get` is explicit, not automatic
+- **(D) Existing rebase state guard**: Added `HasRebaseState()` check as step 1 of core algorithm and in Constraints
+- **(G) Graph state updates**: Added explicit "Update graph: set `BranchRevision`" step after each per-branch sync
+- **(A) Downstack ordering**: Clarified that `Downstack()` returns target→trunk and must be reversed
+- **(C) --restack removal**: Added to Constraints section
+- **(H) Upstack forks**: Explicitly stated that default syncs all forks via BFS
+- **(J) Non-interactive untracked branches**: Added force-mode default (stack on trunk)
+- **(K) Trunk handling**: Algorithm now explicitly skips trunk (trunk sync is `sr sync`'s job)
+- **(L) Remote-deleted branch**: Added verification scenario #20
+
+**Gemini**: Skipped (agy CLI not available)
+**Codex**: Skipped (auth failure)
