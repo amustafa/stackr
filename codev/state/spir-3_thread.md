@@ -12,3 +12,13 @@ Starting specification for issue #3 — redesign `sr get` into a stack-aware rem
 - Graph has `Downstack()`, `Upstack()`, `UpstackTopo()` for walk algorithms.
 - PR info store exists with `BranchPR` struct containing PR number and branch mapping.
 - ADR-0001: metadata lives in `refs/stackr/data`, shared via git push/fetch.
+
+### Specify phase complete
+- Spec drafted, Claude review addressed 3 medium issues (frozen branches, rebase state guard, graph updates)
+- Gemini/Codex unavailable (agy not installed, Codex 401 auth). Architect approved proceeding with Claude only.
+- spec-approval gate approved.
+
+## Phase: Plan
+- 5 phases: git primitives → store layer → engine core → command layer → continue integration
+- Phases 1-2 parallelizable (no mutual deps)
+- Waiting for Claude plan consultation

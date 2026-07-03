@@ -47,7 +47,7 @@ Bottom-up implementation: git primitives → store layer → engine core → com
 
 **`MergeFF(branch, target string) error`**: Fast-forward `branch` to `target`. Equivalent to `git update-ref refs/heads/<branch> <target-sha>` (no checkout required). If the branch is currently checked out, use `git merge --ff-only` instead.
 
-**`Merge(theirs string) error`**: Merge `theirs` into the current branch using `git merge --no-edit <theirs>`. Returns a `MergeConflictError` if conflicts occur (detected by exit code).
+**`Merge(theirs string) error`**: Merge `theirs` into the current branch using `git merge --no-edit <theirs>`. Returns a `MergeConflictError` if conflicts occur (detected by exit code). The `MergeConflictError` type is new — define it in `internal/git/merge.go` alongside the helpers.
 
 **`HasDiverged(local, remote string) (bool, error)`**: Returns true if neither is an ancestor of the other. Implementation: check `IsAncestor(local, remote)` and `IsAncestor(remote, local)` — if both are false, they've diverged.
 
@@ -72,9 +72,10 @@ Bottom-up implementation: git primitives → store layer → engine core → com
 - Add PR number → branch name lookup helper
 
 #### Deliverables
-- [ ] `internal/store/get_state.go` (new) — `GetState` struct, `ReadGetState`, `WriteGetState`, `ClearGetState`, `HasGetState` methods
-- [ ] `internal/store/pr_info.go` — add `BranchForPR(number int) string` lookup method
-- [ ] `internal/store/iface.go` — extend `Backend` interface with `GetState` methods
+- [ ] `internal/store/get_state.go` (new) — `GetState` struct, `ReadGetState`, `WriteGetState`, `ClearGetState`, `HasGetState` methods on `Store`
+- [ ] `internal/store/refstore.go` — add `GetState` delegation methods (following `RebaseState` pattern at lines 144-157)
+- [ ] `internal/store/iface.go` — extend `Backend` interface with `ReadGetState`, `WriteGetState`, `ClearGetState`, `HasGetState`
+- [ ] `internal/store/pr_info.go` — add `func (p *PRInfo) BranchForPR(number int) string` method on the struct
 
 #### Implementation Details
 
@@ -164,7 +165,8 @@ type GetResult struct {
 5. **Compute walk path**: `Downstack(target)` → reverse → skip trunk
 6. **Per-branch sync loop**: For each branch in walk path:
    - Check if branch exists on remote; skip with warning if not
-   - Check if branch is in a worktree; handle dirty state (stash/skip prompt)
+   - **If branch doesn't exist locally**: create it from remote (`git checkout -b <branch> <remote>/<branch>`), track in graph, add to `Created` list, continue to next branch
+   - If branch exists locally: check if it's in a worktree; handle dirty state (stash/skip prompt)
    - Compare local vs remote rev using `IsAncestor`/`HasDiverged`
    - Fast-forward, skip, or handle divergence (prompt or force-replace)
    - On merge conflict: save `GetState`, return with `Conflicts: true`
@@ -239,22 +241,26 @@ type GetResult struct {
 - When `GetState` exists, resume the walk from the next branch after conflict resolution
 
 #### Deliverables
-- [ ] `internal/engine/continue.go` — new file (or extend existing) with `Continue()` that dispatches on operation type
-- [ ] `internal/engine/continue_test.go` — tests for get-operation continue flow
+- [ ] `internal/engine/conflict.go` — extend existing `Continue()` and `Abort()` to handle `GetState`
+- [ ] `internal/engine/conflict_test.go` — tests for get-operation continue and abort flows
 
 #### Implementation Details
 
-The current `Continue()` function doesn't exist as an engine function (the cmd just calls rebase-continue). We need to create a proper `Continue()` in the engine that:
+`Continue()` already exists in `internal/engine/conflict.go` (line 10) and handles `RebaseState`. Extend it to dispatch on operation type:
 
-1. Check `HasGetState()` first (get state takes priority since it's the newer operation)
+1. Check `HasGetState()` first (get state takes priority since it may contain an in-progress merge)
 2. If get state exists:
-   - Complete the current merge (`git merge --continue` or check if conflict is resolved)
+   - If merge is in progress, complete it (`git commit --no-edit` to finalize the resolved merge)
    - Update `BranchRevision` in graph for the resolved branch
    - Resume the walk from `GetState.CurrentBranch` (find its position in `WalkPath`, continue from next)
    - Clear `GetState` when walk completes
    - Return `GetResult` with navigation info
-3. If rebase state exists: fall through to existing rebase-continue logic
-4. If neither: error "nothing to continue"
+3. If rebase state exists: fall through to existing rebase-continue logic (unchanged)
+4. If neither: error "nothing to continue" (existing behavior)
+
+Also extend `Abort()` (line 65 of `conflict.go`) to handle `GetState`:
+- If get state exists: abort the in-progress merge (`git merge --abort`), clear `GetState`, return to `OrigBranch`
+- If rebase state exists: fall through to existing abort logic
 
 #### Acceptance Criteria
 - [ ] `sr continue` after a get-merge conflict resumes the walk
@@ -263,9 +269,11 @@ The current `Continue()` function doesn't exist as an engine function (the cmd j
 - [ ] `GetState` is cleared on successful completion
 - [ ] Navigation happens after successful completion (unless `--stay`)
 - [ ] Existing rebase-continue still works unchanged
+- [ ] `sr abort` during a get-merge conflict clears `GetState` and restores original branch
+- [ ] Existing rebase-abort still works unchanged
 
 #### Test Plan
-- **Integration Tests**: Create a merge conflict during `sr get`, resolve it, run `sr continue`, verify walk resumes
+- **Integration Tests**: Create a merge conflict during `sr get`, resolve it, run `sr continue`, verify walk resumes. Also test `sr abort` cancels the operation cleanly.
 
 ## Dependency Map
 ```
@@ -298,9 +306,21 @@ Phases 1 and 2 can be built in parallel (no mutual dependencies).
 - [ ] CLI help text updated via cobra command definitions
 
 ## Expert Review
-*(To be populated during consultation)*
+
+### Iteration 1 — Claude Review (COMMENT, HIGH confidence)
+**Key feedback addressed:**
+- **(A) RefStore delegation**: Added `internal/store/refstore.go` to Phase 2 deliverables — GetState needs Store + RefStore + Backend interface updates
+- **(B) Continue() exists**: Fixed Phase 5 to extend existing `Continue()` in `conflict.go` (line 10), not create a new file
+- **(C) Branch creation path**: Added "branch doesn't exist locally" step to per-branch sync loop (creates from remote)
+- **MergeConflictError**: Noted as new type to define in Phase 1
+- **Abort() for GetState**: Added to Phase 5 — extend existing `Abort()` in `conflict.go` to handle GetState
+- **BranchForPR**: Clarified as method on `*PRInfo` struct (not on Store)
+
+**Gemini**: Skipped (agy CLI not available)
+**Codex**: Skipped (auth failure)
 
 ## Change Log
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-07-03 | Initial plan draft | Based on approved spec |
+| 2026-07-03 | Plan with multi-agent review | Address Claude review feedback |
