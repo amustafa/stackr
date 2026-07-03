@@ -8,11 +8,11 @@ plan_phases:
     status: complete
   - id: phase_2
     title: 'Phase 2: ui.Form — reusable Bubble Tea form component'
-    status: in_progress
+    status: complete
   - id: phase_3
     title: 'Phase 3: cmd/init.go — git-init flow integration'
-    status: pending
-current_plan_phase: phase_2
+    status: in_progress
+current_plan_phase: phase_3
 gates:
   spec-approval:
     status: approved
@@ -27,7 +27,7 @@ gates:
   verify-approval:
     status: pending
 iteration: 1
-build_complete: true
+build_complete: false
 history: []
 started_at: '2026-07-03T02:59:21.593Z'
-updated_at: '2026-07-03T13:25:13.483Z'
+updated_at: '2026-07-03T13:27:55.622Z'
