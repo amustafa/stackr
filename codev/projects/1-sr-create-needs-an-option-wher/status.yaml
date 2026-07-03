@@ -5,11 +5,11 @@ phase: implement
 plan_phases:
   - id: phase_1
     title: 'Phase 1: Core --stay Implementation'
-    status: in_progress
+    status: done
   - id: phase_2
     title: 'Phase 2: Tests'
-    status: pending
-current_plan_phase: phase_1
+    status: in_progress
+current_plan_phase: phase_2
 gates:
   spec-approval:
     status: approved
@@ -23,7 +23,7 @@ gates:
     status: pending
   verify-approval:
     status: pending
-iteration: 3
+iteration: 1
 build_complete: true
 history:
   - iteration: 1
@@ -59,4 +59,4 @@ history:
         file: >-
           /home/amustafa/workspace/stackr/.builders/spir-1/codev/projects/1-sr-create-needs-an-option-wher/1-phase_1-iter2-claude.txt
 started_at: '2026-07-02T23:34:04.893Z'
-updated_at: '2026-07-02T23:59:14.070Z'
+updated_at: '2026-07-03T00:01:01.030Z'
