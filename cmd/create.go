@@ -23,6 +23,7 @@ var createCmd = &cobra.Command{
 			Insert:    createFlagInsert,
 			Desc:      createFlagDesc,
 			Worktree:  createFlagWorktree,
+			Stay:      createFlagStay,
 		}
 		if len(args) > 0 {
 			opts.Name = args[0]
@@ -39,6 +40,7 @@ var (
 	createFlagInsert    bool
 	createFlagDesc      string
 	createFlagWorktree  bool
+	createFlagStay      bool
 )
 
 func init() {
@@ -49,5 +51,6 @@ func init() {
 	createCmd.Flags().BoolVarP(&createFlagInsert, "insert", "i", false, "insert between current and its children")
 	createCmd.Flags().StringVar(&createFlagDesc, "desc", "", "set branch description/objective")
 	createCmd.Flags().BoolVar(&createFlagWorktree, "worktree", false, "create in a worktree instead of checking out")
+	createCmd.Flags().BoolVar(&createFlagStay, "stay", false, "create branch without checking it out")
 	rootCmd.AddCommand(createCmd)
 }

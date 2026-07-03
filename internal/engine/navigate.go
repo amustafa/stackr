@@ -81,8 +81,8 @@ func NavigateToBranch(c *context.Context, target string) (NavigateResult, error)
 		choice, err := ui.Select(
 			"You have uncommitted changes. What would you like to do?",
 			[]string{
-				"Move changes to worktree (stash + pop)",
 				"Leave changes here",
+				"Move changes to worktree (stash + pop)",
 			},
 		)
 		if err != nil {

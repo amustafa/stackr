@@ -68,6 +68,22 @@ Merge a branch into its parent. The branch is removed and its children are repar
 **Absorb**:
 Distribute staged changes to the appropriate commits in the stack.
 
+**Stack Depth**:
+The number of branches between a branch and trunk (inclusive of the branch, exclusive of trunk). Stored in the graph as a field on each branch entry. Updated on graph mutations (create, delete, fold, restack, track). Surfaced to the shell via the **Prompt Cache**.
+
+### Shell Integration
+
+**Shell Hook**:
+A shell function that wraps the `sr` binary. Intercepts output markers (`__sr_cd:`) to perform actions the subprocess can't (like `cd`). Also installs a chpwd handler for prompt variable updates. Emitted by `sr shell-hook`.
+_Avoid_: shell wrapper, shim
+
+**Shell Setup** (`sr shell`):
+The setup command that installs the **Shell Hook** into the user's shell rc file. Takes a shell name (`zsh`, `bash`). Interactive (TTY): offers to append the eval line to the rc file. Piped: prints the eval line for manual use.
+_Avoid_: init (overloaded with `sr init`)
+
+**Prompt Cache**:
+A two-line flat file at `.git/.stackr/prompt-cache` containing the current branch name and stack depth. Written by `sr` on graph mutations. Read by the chpwd handler in the **Shell Hook** to set `SR_BRANCH` and `SR_STACK_DEPTH` without spawning a subprocess. **Local Data** — never shared.
+
 ### Storage
 
 **Shared Metadata**:
@@ -88,6 +104,9 @@ A JSON serialization of the graph at a point in time, used for undo. Taken befor
 - On squash, **Branch Context** and **Commit Context** are both lost — anything that should outlive the branch must be persisted to a file by the user or agent
 - **Sync** is composed of: fetch trunk → **Restack** → prune merged (with confirmation)
 - **Submit** always pushes **Downstack** ancestors, optionally pushes **Upstack** dependents
+- **Prompt Cache** is a read-optimized projection of the graph — **Local Data**, written on graph mutations, consumed by the **Shell Hook**
+- **Stack Depth** lives in the graph (shared) and is projected into the **Prompt Cache** (local) for shell access
+- **Shell Setup** installs the **Shell Hook**; the hook calls `sr shell-hook` for the actual function code
 
 ## Example dialogue
 
