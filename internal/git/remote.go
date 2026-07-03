@@ -36,6 +36,11 @@ func (r *Runner) RemoteBranchExists(remote, branch string) (bool, error) {
 	return err == nil, nil
 }
 
+// AddRemote adds a named remote with the given URL.
+func (r *Runner) AddRemote(name, url string) error {
+	return r.RunGit("remote", "add", name, url)
+}
+
 // ListRemotes returns the list of configured remotes.
 func (r *Runner) ListRemotes() ([]string, error) {
 	out, err := r.RunGitCapture("remote")
