@@ -215,3 +215,87 @@ func TestRefStoreUndoSnapshot(t *testing.T) {
 		t.Fatal("expected error on empty undo stack")
 	}
 }
+
+func TestRefStoreGetStateRoundTrip(t *testing.T) {
+	rs := tempRefStore(t)
+
+	if rs.HasGetState() {
+		t.Fatal("expected no get state initially")
+	}
+
+	state := &GetState{
+		Operation:     "get",
+		OrigBranch:    "main",
+		Target:        "feat-c",
+		WalkPath:      []string{"feat-a", "feat-b", "feat-c"},
+		Completed:     []string{"feat-a"},
+		CurrentBranch: "feat-b",
+		Flags: GetFlags{
+			Force:     true,
+			Worktree:  false,
+			Downstack: true,
+		},
+	}
+	if err := rs.WriteGetState(state); err != nil {
+		t.Fatalf("WriteGetState: %v", err)
+	}
+	if !rs.HasGetState() {
+		t.Fatal("expected get state to exist")
+	}
+
+	got, err := rs.ReadGetState()
+	if err != nil {
+		t.Fatalf("ReadGetState: %v", err)
+	}
+	if got.Operation != "get" {
+		t.Fatalf("unexpected operation: %q", got.Operation)
+	}
+	if got.Target != "feat-c" {
+		t.Fatalf("unexpected target: %q", got.Target)
+	}
+	if len(got.WalkPath) != 3 {
+		t.Fatalf("unexpected walk path length: %d", len(got.WalkPath))
+	}
+	if got.CurrentBranch != "feat-b" {
+		t.Fatalf("unexpected current branch: %q", got.CurrentBranch)
+	}
+	if !got.Flags.Force {
+		t.Fatal("expected Force flag to be true")
+	}
+	if !got.Flags.Downstack {
+		t.Fatal("expected Downstack flag to be true")
+	}
+
+	if err := rs.ClearGetState(); err != nil {
+		t.Fatalf("ClearGetState: %v", err)
+	}
+	if rs.HasGetState() {
+		t.Fatal("expected no get state after clear")
+	}
+}
+
+func TestPRInfoBranchForPR(t *testing.T) {
+	info := &PRInfo{
+		Branches: map[string]*BranchPR{
+			"feat-a": {Number: 42, State: "open"},
+			"feat-b": {Number: 99, State: "merged"},
+			"feat-c": {Number: 0, State: "open"},
+		},
+	}
+
+	if got := info.BranchForPR(42); got != "feat-a" {
+		t.Fatalf("BranchForPR(42) = %q, want feat-a", got)
+	}
+	if got := info.BranchForPR(99); got != "feat-b" {
+		t.Fatalf("BranchForPR(99) = %q, want feat-b", got)
+	}
+	if got := info.BranchForPR(999); got != "" {
+		t.Fatalf("BranchForPR(999) = %q, want empty", got)
+	}
+
+	// nil PRInfo should return empty.
+	var nilInfo *PRInfo
+	if got := nilInfo.BranchForPR(42); got != "" {
+		t.Fatalf("nil BranchForPR(42) = %q, want empty", got)
+	}
+}
