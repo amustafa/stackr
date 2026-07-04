@@ -201,16 +201,15 @@ func applyFormResult(runner *git.Runner, cwd string, result *ui.FormResult) erro
 	}
 
 	branch := result.Values["branch"]
-	currentBranch, _ := runner.GetConfig("init.defaultBranch")
-	if currentBranch == "" {
-		currentBranch = "main"
-	}
-	if branch != "" && branch != currentBranch {
+	if branch != "" {
 		if runner.IsHeadUnborn() {
 			_ = runner.RunGit("symbolic-ref", "HEAD", "refs/heads/"+branch)
 		} else {
-			if err := runner.RenameBranch(currentBranch, branch); err != nil {
-				return fmt.Errorf("could not rename branch to %q: %w", branch, err)
+			currentBranch, _ := runner.CurrentBranch()
+			if currentBranch != "" && currentBranch != branch {
+				if err := runner.RenameBranch(currentBranch, branch); err != nil {
+					return fmt.Errorf("could not rename branch to %q: %w", branch, err)
+				}
 			}
 		}
 	}
