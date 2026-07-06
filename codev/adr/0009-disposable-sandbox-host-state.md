@@ -8,7 +8,7 @@ Treat the container as **fully disposable**. All durable state lives on the **ho
 
 - Restart/resume = throw the container away, start a fresh one from the same base image + mounts, and run `claude --continue` — which resumes the exact session because the JSONL is host-side and the project hash matches (ADR-0008).
 - "Add context as needed" is a first-class consequence: you **cannot add a bind mount to a running container**, so adding context (a sibling repo, a docs dir, an env var) inherently requires recreating it — and a disposable model makes that a non-event.
-- `sr sandbox` persists a small **manifest** (`.git/.stackr/forks/<branch>.json`: mounts, launch command, session id) so a restart reconstructs the container identically, plus whatever was just added, and auto-resumes.
+- `sr sandbox` persists a small **manifest** (`.git/.stackr/sandboxes/<branch>.json`: mounts, launch command, session id) so a restart reconstructs the container identically, plus whatever was just added, and auto-resumes.
 - In-container tool installs are **ephemeral by design**: the toolchain belongs in the base image (or the per-project layer), project dependencies live in the mounted worktree, and package caches are bind-mounted to stay warm.
 
 Two levels of teardown reflect this: `sr sandbox stop` keeps the container so `docker start` resumes the **live** in-memory zellij session; `sr sandbox rm` destroys the container and drops to cold `--continue` resume. Either way, **Claude progress is never lost.**
