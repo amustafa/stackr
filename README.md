@@ -304,6 +304,37 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 | `sr abort` | Abort an in-progress operation |
 | `sr revert` | Revert a previous operation |
 
+### Sandboxed AI Sessions (`sr sandbox`)
+
+Run Claude with `--dangerously-skip-permissions` **without** exposing your host:
+a disposable Docker container works on the branch's worktree, while your
+`~/.claude` config, skills, and session history are shared so the work is
+indistinguishable from a normal local session — and resumable.
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `sr sandbox [branch] [-- "<prompt>"]` | `sb` | Launch (or reuse) a sandbox for a branch and attach |
+| `sr sandbox attach [branch]` | | Reattach; no arg opens a searchable picker |
+| `sr sandbox ls` | | List this repo's sandboxes with status |
+| `sr sandbox watch [--notify]` | | Live dashboard, or headless desktop notifications |
+| `sr sandbox stop <branch>` | | Stop the container (relaunch resumes) |
+| `sr sandbox rm <branch> [--delete]` | | Remove the container (`--delete` also removes the worktree) |
+| `sr sandbox config [--ai]` | | Edit sandbox config in a TUI, or let Claude help |
+
+Highlights:
+
+- **Session continuity** — the sandbox's Claude session appears under the same
+  `~/.claude/projects` entry as the repo, so host `claude --resume` sees it.
+- **Egress firewall by default** — only an allowlist (Anthropic, GitHub,
+  registries) is reachable; the agent requests new domains, which you add to the
+  config and relaunch. `--network full` opts out.
+- **No credentials in the sandbox** — it records a proposed PR as a `pr` branch
+  context entry; run `sr submit` on the host to open the PR from it.
+- **Attention** — `sr sandbox ls`/`watch` show when a session is waiting on you.
+
+Requires Docker. The base image is built once and reused; per-container
+differences are just bind mounts and the launch command.
+
 ### Utilities
 
 | Command | Description |
@@ -311,7 +342,7 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 | `sr rename` | Rename a branch |
 | `sr modify` | Amend the current branch and restack descendants |
 | `sr worktree` | Manage git worktrees |
-| `sr claude install` | Install the stackr skill for Claude Code |
+| `sr claude install` | Install the stackr + sandbox skills for Claude Code |
 | `sr shell-hook` | Print shell integration script |
 | `sr completion` | Generate shell completion scripts |
 

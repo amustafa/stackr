@@ -35,8 +35,12 @@ var claudeInstallCmd = &cobra.Command{
 		if err := os.WriteFile(path, []byte(stackrSkillContent), 0o644); err != nil {
 			return fmt.Errorf("could not write skill: %w", err)
 		}
-
 		fmt.Printf("Installed stackr skill to %s\n", filepath.Join(skillDir, skillFile))
+
+		if err := installSandboxSkill(repoRoot); err != nil {
+			return err
+		}
+		fmt.Printf("Installed sr-sandbox skill to %s\n", filepath.Join(sandboxSkillDir, skillFile))
 		return nil
 	},
 }
