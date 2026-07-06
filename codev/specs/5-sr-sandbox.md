@@ -33,9 +33,10 @@ We want the productivity of skip-permissions **without** exposing the host: run 
 - Per ADR-0006: worktree creation continues to fire the `post-worktree` hook — the sandbox launches *after* the hook has set up the worktree.
 - Per **ADR-0008**: the worktree and main `.git` are mounted at their real host paths (path-identical), and `.git` is shared read-write. Session continuity depends on this.
 - Per **ADR-0009**: the container is disposable; durable state is host-side. In-container installs are ephemeral by design.
-- Per **ADR-0010**: the sandbox carries **no GitHub credentials** and performs no authenticated remote operations. Push/PR happen host-side via `sr submit`, which consumes a **PR Suggestion** the sandbox deposits. Guiding principle: prefer host-side revocable operations over durable secrets in a skip-permissions box.
+- Per **ADR-0010**: the sandbox carries **no GitHub credentials** and performs no authenticated remote operations. The sandbox records a **PR Suggestion** as a reserved `pr` **Branch Context** entry; host-side `sr submit` reads it to open the PR. Guiding principle: prefer host-side revocable operations over durable secrets in a skip-permissions box.
+- Per **ADR-0011**: attention hooks are provided via `claude --settings <file>` (additive over the mounted `~/.claude`), never installed into the developer's global `~/.claude/settings.json`. The sandbox's main session must not use `--bare` (which skips hooks).
 - Requires Docker on the host. The feature is a no-op / clear error where Docker is unavailable.
-- The base image and all mounts are **bind mounts**; no per-fork image builds and no named-volume copies (efficiency requirement — see Solution).
+- The base image and all mounts are **bind mounts**; no per-sandbox image builds and no named-volume copies (efficiency requirement — see Solution).
 - One sandbox per branch (git allows a branch in only one worktree at a time).
 
 ## Solution
@@ -53,15 +54,15 @@ host                                             container (disposable, run -d)
                                                  zellij session "B"
                                                    └─ claude --dangerously-skip-permissions "<prompt>"
 
-manifest: .git/.stackr/forks/<B>.json  (mounts, initial command, session id)
+manifest: .git/.stackr/sandboxes/<B>.json  (mounts, initial command, session id)
 ```
 
 Because the container's `cwd` equals the host worktree path and `~/.claude` is mounted at the same path, Claude computes the **same project hash** as the host — session logs land in the shared `~/.claude/projects/<hash>` and host `--resume`/history pick them up for free (ADR-0008).
 
 ### Efficiency model (single base image + bind mounts)
 
-- **One base image** `stackr-fork:base`, built once and cached by Docker layers. Rebuilt only when its Dockerfile changes.
-- **Optional per-project layer**: a repo may ship `.stackr/fork/Dockerfile` (`FROM stackr-fork:base`) that adds its toolchain (e.g. Go for this repo). Built and cached **once per project**, shared by all its sandboxes.
+- **One base image** `stackr-sandbox:base`, built once and cached by Docker layers. Rebuilt only when its Dockerfile changes.
+- **Optional per-project layer**: a repo may ship `.stackr/sandbox/Dockerfile` (`FROM stackr-sandbox:base`) that adds its toolchain (e.g. Go for this repo). Built and cached **once per project**, shared by all its sandboxes.
 - **Per-container differences are only**: the bind mounts and the launch command. Nothing is copied; "volume creation" is effectively free.
 
 ### Base image contents
@@ -80,7 +81,7 @@ Shared base: `git`, `gh`, `curl`/ca-certificates, the `claude` CLI, `zellij`, an
    - Create-or-reuse the worktree (fires `post-worktree` hook).
    - Ensure base image (and per-project layer) exist; build if missing.
    - `docker run -d` the container with the bind mounts above, running `zellij` with a session named after the branch, whose command is `claude --dangerously-skip-permissions "<prompt>"` (plain interactive Claude if no prompt).
-   - Write the manifest to `.git/.stackr/forks/<branch>.json`.
+   - Write the manifest to `.git/.stackr/sandboxes/<branch>.json`.
    - Print the identifier (branch name) and **attach** (same path as `attach`).
 2. Detaching (zellij detach / closing the terminal) leaves the container running and Claude alive.
 3. `sr sandbox attach [branch]` — `docker exec -it <container> zellij attach <branch>`. Bare `sr sandbox attach` opens the searchable selector.
@@ -101,7 +102,7 @@ Skip-permissions removes *permission* prompts but not the legitimate need for hu
 
 #### Detection: Claude Code hooks → status file
 
-A sandbox-scoped hook set (installed into the mounted `~/.claude` but **gated on an `SR_SANDBOX=<branch>` env var**, so the same hooks are inert during normal host sessions) publishes state to `.git/.stackr/forks/<branch>.status` (Local Data):
+A sandbox-scoped hook set — provided via a **per-invocation `--settings` file** (ADR-0011), so `~/.claude` is never mutated and the hooks exist only for sandbox sessions — publishes state to `.git/.stackr/sandboxes/<branch>.status` (Local Data). `SR_SANDBOX=<branch>` tells the hook which sandbox it is:
 
 | Hook | Transition | Status |
 |---|---|---|
@@ -160,13 +161,13 @@ Two ways to make extra executables available inside the sandbox, both assembled 
 
 ### Remote operations & PR suggestions (credential-free)
 
-The sandbox has no GitHub credentials (ADR-0010), so it never pushes or opens PRs. Instead:
+The sandbox has no GitHub credentials (ADR-0010), so it never pushes or opens PRs. It reuses the existing **Branch Context** mechanism instead of any new file or command:
 
 1. The agent commits to the branch — those commits are already in the shared `.git` (ADR-0008).
-2. The agent generates a PR title + body and **deposits a PR Suggestion** as Local Data at `.git/.stackr/pr-suggestions/<branch>.json` (e.g. via a new `sr submit --deposit`/`--prepare` mode that persists instead of printing).
-3. Host-side, `sr submit` detects a deposited suggestion for the branch and offers to push the branch and create/update the PR using it — no host AI needed, the work is prepared. On success, the suggestion is cleared.
+2. When it has a PR-worthy result, the agent records a **PR Suggestion** via `sr context set pr "<proposed title/body>"` — a reserved Branch Context entry that lives in the shared `refs/stackr/data`.
+3. Host-side, `sr submit` reads the reserved `pr` entry (if present) and uses it as the PR title/body directly — no AI regeneration — offering to edit before it pushes and creates/updates the PR. If absent, submit falls back to its existing generation from Description + Context + commits.
 
-This makes the sandbox a persisted, credential-free `--aiprepare` producer whose output crosses the container/host boundary via the shared `.git`. Direct-push remains available only if the user explicitly opts into mounting credentials; it is never the default.
+`PrepareAI`/`submit` already read branch **Description** + **Context** to build a PR (`internal/engine/prepare.go`); this only adds special-casing of the reserved `pr` key. Direct-push remains available only if the user explicitly opts into mounting credentials; it is never the default.
 
 ## New Components
 
@@ -177,13 +178,12 @@ This makes the sandbox a persisted, credential-free `--aiprepare` producer whose
 | `internal/engine/sandbox_docker.go` | Thin wrappers over the `docker` CLI (run, exec, stop, rm, ps-by-label, image build/exists). |
 | `internal/store/sandbox_config.go` | Portable `Sandbox` section on `store.Config` + machine-specific local-file loader. |
 | `internal/ui/filter_selector.go` | Searchable selector (textinput filter over the existing selector model). |
-| `internal/sandbox/hooks.go` | Installs the env-gated attention hooks into `~/.claude`; hook script writes the status file. |
-| `internal/sandbox/status.go` | Status type (`state`, `reason`, `updated_at`) + read/write/watch of `.git/.stackr/forks/<branch>.status`. |
+| `internal/sandbox/hooks.go` | Builds the sandbox-only `--settings` JSON with the attention hooks (ADR-0011); the embedded hook script writes the status file. |
+| `internal/sandbox/status.go` | Status type (`state`, `reason`, `updated_at`) + read/write/watch of `.git/.stackr/sandboxes/<branch>.status`. |
 | `internal/ui/watch.go` | `sr sandbox watch` two-pane live dashboard (awaiting / all lists, detail pane, click-to-attach, jump-to-first-awaiting hotkey). |
 | `internal/engine/sandbox_watch.go` | Watch orchestration + `--notify` headless notifier (desktop notifications on transition). |
-| `internal/sandbox/manifest.go` | Manifest type + read/write to `.git/.stackr/forks/<branch>.json`. |
-| `internal/sandbox/suggestion.go` | PR Suggestion type + read/write/clear at `.git/.stackr/pr-suggestions/<branch>.json`. |
-| `internal/engine/submit.go` (modify) | New deposit mode (persist a suggestion) + host consume path (detect → push → create/update → clear). |
+| `internal/sandbox/manifest.go` | Manifest type + read/write to `.git/.stackr/sandboxes/<branch>.json`. |
+| `internal/engine/submit.go` / `prepare.go` (modify) | Special-case the reserved `pr` Branch Context entry: if present, use it as the PR title/body directly instead of AI regeneration. |
 | `assets/Dockerfile.base` (embedded via `go:embed`) | The shared base image definition, built on first use. |
 | `.claude/skills/sr-sandbox/SKILL.md` | The `/sr-sandbox` skill (thin conversational wrapper). |
 
@@ -194,7 +194,7 @@ This makes the sandbox a persisted, credential-free `--aiprepare` producer whose
 | `internal/store/config.go` | Add `Sandbox` sub-struct to `Config`. |
 | `cmd/claude.go` (or new) | Optionally teach `sr claude install` to also install the sandbox skill. |
 | `README.md` | Add a `sr sandbox` section (at implementation time). |
-| `.git/info/exclude` handling | Ensure `.git/.stackr/sandbox.local.json` and forks dir are ignored. |
+| `.git/info/exclude` handling | Ensure `.git/.stackr/sandbox.local.json` and sandboxes dir are ignored. |
 
 ## Success Criteria
 
@@ -211,7 +211,7 @@ This makes the sandbox a persisted, credential-free `--aiprepare` producer whose
 - `sr sandbox config` opens an editable TUI; `--ai` launches a scoped Claude session.
 - Only one image build per project; subsequent sandboxes reuse cached images and only differ by mounts + command.
 - The sandbox has **no** GitHub credentials — no ssh keys, no gh token, no credential helper; authenticated remote ops fail inside the container.
-- The sandbox can deposit a PR Suggestion; host-side `sr submit` detects it, pushes the branch, and creates/updates the PR using it, then clears it.
+- The sandbox records a PR Suggestion via `sr context set pr …`; host-side `sr submit` reads the reserved entry and uses it as the PR title/body (offer edit → push → create/update).
 - When a sandbox session ends its turn / asks a question / presents options, its status file flips to an awaiting state with the pending text; replying flips it back to `working`.
 - The attention hooks are inert during normal host Claude sessions (not gated `SR_SANDBOX`).
 - `sr sandbox ls` / attach TUI show a status column + pending-question text; the shell prompt shows a count of awaiting sandboxes.
@@ -241,7 +241,7 @@ This makes the sandbox a persisted, credential-free `--aiprepare` producer whose
 6. **Cold resume**: `sr sandbox rm feat-x` (container gone, worktree kept), `sr sandbox feat-x` → Claude `--continue` resumes the prior session from host logs.
 7. **Full teardown**: `sr sandbox rm feat-x --delete` → container, worktree, and branch removed.
 8. **Efficiency**: launch a second sandbox on another branch → no image rebuild, deps already warm from cache mounts.
-9. **Per-project layer**: repo with `.stackr/fork/Dockerfile` → toolchain present in container; repo without it → runs on base.
+9. **Per-project layer**: repo with `.stackr/sandbox/Dockerfile` → toolchain present in container; repo without it → runs on base.
 10. **Config TUI**: `sr sandbox config`, edit network policy + cache toggle, confirm → portable value written to git-ref config.
 11. **Config --ai**: `sr sandbox config --ai` → Claude session with scoped tools edits config per instruction.
 12. **No Docker**: on a host without Docker → clear error, no partial state.
@@ -255,7 +255,7 @@ This makes the sandbox a persisted, credential-free `--aiprepare` producer whose
 
 ## Open Questions
 
-- **PR Suggestion deposit format & submit UX** (resolved in principle — ADR-0010): exact JSON shape of the suggestion, the `sr submit --deposit`/`--prepare` flag name, and how the host consume path presents (auto vs. confirm). Deposit location settled: Local Data at `.git/.stackr/pr-suggestions/<branch>.json`.
+- **PR Suggestion — reserved key & submit UX** (mechanism settled — ADR-0010: a reserved `pr` Branch Context entry): confirm the key name (`pr`) and how title vs. body are split (single entry vs. `pr`/branch Description), and how the host consume path presents (auto vs. confirm-edit).
 - **Base image provisioning** — build-on-first-use from the embedded Dockerfile vs. an optional prebuilt registry image; how the image is versioned/invalidated.
 - **Cold-restart zellij mapping** — exact `--continue` vs `--resume <id>` selection when a container is recreated.
 

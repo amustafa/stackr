@@ -6,9 +6,9 @@
 
 The sandbox is given **no GitHub credentials**. It cannot `git push`, create PRs, or run any authenticated remote operation. All remote mutation happens on the **host**, through the existing `sr submit` flow.
 
-To keep the end-to-end loop intact, the sandbox instead **deposits a PR Suggestion** — the generated PR title and body — as **Local Data** at `.git/.stackr/pr-suggestions/<branch>.json`. Because the worktree's `.git` is shared (ADR-0008), the agent's commits are already in the object store on the branch; the suggestion is the only extra artifact needed. Host-side, `sr submit` detects a deposited suggestion for the branch and offers to push the branch and create/update the PR using it — no AI required on the host, since the work is already prepared. The suggestion is cleared once the PR is created.
+To keep the end-to-end loop intact, the sandbox instead records a **PR Suggestion** — the proposed PR title/body — as a reserved **Branch Context** entry (key `pr`), using the existing `sr context set` mechanism. Because the worktree's `.git` is shared (ADR-0008), both the agent's commits and the branch context (in `refs/stackr/data`) are already in the shared git dir; no new file or command is needed. Host-side, `sr submit` reads the reserved entry and uses it as the PR title/body directly — no AI regeneration required — offering to edit before creating/updating the PR.
 
-This reuses stackr's existing submit machinery (ADR-0004): the sandbox is effectively a persisted, credential-free `--aiprepare` producer whose output survives the container/host boundary.
+This reuses stackr's existing machinery end-to-end: `sr context set` to record, and `PrepareAI`/`submit`, which already read branch **Description** + **Context** to build a PR (ADR-0004). The sandbox is effectively a credential-free PR-prep producer whose output rides the branch graph across the container/host boundary.
 
 ## Alternatives considered
 
@@ -19,6 +19,7 @@ This reuses stackr's existing submit machinery (ADR-0004): the sandbox is effect
 ## Consequences
 
 - The agent cannot verify remote-side outcomes (CI, PR checks) from inside the sandbox — those are host-side follow-ups.
-- `sr submit` grows a path to consume a deposited **PR Suggestion** (detect, confirm, push, create/update, clear).
-- The suggestion is **Local Data** — it does not travel to the remote until `sr submit` acts on it, so nothing half-baked is pushed.
+- `sr submit` grows a path to read the reserved `pr` **Branch Context** entry and use it as the PR title/body (offer edit → push → create/update).
+- The suggestion is **Branch Context** (Shared Metadata), so it is lost on squash — the sandbox must set it after any squash. The sandbox has no credentials, so it never pushes the metadata; the host does at submit time.
+- A reserved context key (`pr`) is now special-cased by submit — document it so users don't collide with it.
 - Direct-push remains possible for users who explicitly opt into mounting credentials, but it is never the default.

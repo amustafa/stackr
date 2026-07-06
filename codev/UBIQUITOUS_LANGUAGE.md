@@ -106,7 +106,7 @@ A disposable Docker container that runs Claude with `--dangerously-skip-permissi
 _Avoid_: fork (git "fork" is a different concept), container (too generic — the sandbox is the whole disposable session, not just the container), builder (that's an `afx` agent).
 
 **Manifest**:
-The record of a sandbox — its bind mounts, launch command, and session id — stored at `.git/.stackr/forks/<branch>.json`. **Local Data**. Lets a destroyed container be reconstructed and its session resumed.
+The record of a sandbox — its bind mounts, launch command, and session id — stored at `.git/.stackr/sandboxes/<branch>.json`. **Local Data**. Lets a destroyed container be reconstructed and its session resumed.
 _Avoid_: config (the manifest is per-sandbox runtime state, not user-chosen configuration).
 
 **Attach**:
@@ -119,18 +119,18 @@ User-chosen sandbox settings, split three ways: **portable** (git-ref `config.js
 Two config-driven ways to put extra executables on the container's `PATH`. The **Sandbox Bin Dir** is a portable repo-local folder (default `.stackr/sandbox/bin/`), prepended to `PATH`. **PATH Mounts** are machine-specific host directories bind-mounted at their real paths and added to `PATH`. Host binaries must match the container's OS/arch/libc.
 
 **Base Image**:
-The single cached Docker image (`stackr-fork:base`) every sandbox runs from, holding the universal toolchain. A repo may extend it with a per-project `.stackr/fork/Dockerfile`. Containers differ only by their bind mounts and launch command, never by bespoke image builds.
+The single cached Docker image (`stackr-sandbox:base`) every sandbox runs from, holding the universal toolchain. A repo may extend it with a per-project `.stackr/sandbox/Dockerfile`. Containers differ only by their bind mounts and launch command, never by bespoke image builds.
 
 **Sandbox Status**:
-The current interaction state of a **Sandbox**, published by env-gated Claude Code hooks to `.git/.stackr/forks/<branch>.status`. States: `working`, `awaiting-input` (a question), `awaiting-choice` (options), `exited`. Carries a `reason` — the pending question/options/summary — surfaced in `sr sandbox ls`, the attach selector, and **Watch**. **Local Data**.
+The current interaction state of a **Sandbox**, published by Claude Code hooks (loaded via a sandbox-only `--settings` file — ADR-0011) to `.git/.stackr/sandboxes/<branch>.status`. States: `working`, `awaiting-input` (a question), `awaiting-choice` (options), `exited`. Carries a `reason` — the pending question/options/summary — surfaced in `sr sandbox ls`, the attach selector, and **Watch**. **Local Data**.
 _Avoid_: "waiting" (ambiguous — waiting on the agent vs. waiting on the human; the awaiting states specifically mean waiting on the human).
 
 **Watch**:
 `sr sandbox watch` — the attention surface. `--notify` runs a headless notifier firing desktop notifications on transitions into an awaiting state. Bare, it opens a live two-pane dashboard: left has an awaiting-input section over an all-sessions section, right shows the selected session's detail. Navigable by keyboard and mouse, with a hotkey to the first awaiting session and click-to-attach. Scope defaults to the current project (config), or `--all`.
 
 **PR Suggestion**:
-A prepared PR title and body deposited by a **Sandbox** (which has no credentials) at `.git/.stackr/pr-suggestions/<branch>.json`, for a host-side **Submit** to push and open/update the PR from. **Local Data** — does not travel to the remote until submit acts on it; cleared once the PR is created.
-_Avoid_: draft PR (that's a GitHub state), PR info (that's the created-PR metadata in **Shared Metadata**).
+A proposed PR title/body a **Sandbox** records as a reserved **Branch Context** entry (key `pr`) instead of pushing — it has no credentials. Host-side **Submit** reads the entry and uses it as the PR title/body directly (skipping AI regeneration), offering to edit. Lives in the branch graph (**Shared Metadata**); the sandbox never pushes it, the host does at submit time.
+_Avoid_: draft PR (a GitHub state); a separate file (it is not — it is a **Branch Context** entry).
 
 ## Relationships
 
@@ -147,8 +147,9 @@ _Avoid_: draft PR (that's a GitHub state), PR info (that's the created-PR metada
 - A **Sandbox** operates on exactly one branch's **worktree**; git's one-worktree-per-branch rule means one sandbox per branch
 - A **Sandbox** is disposable — its durable state (the worktree, session logs in `~/.claude/projects`) is host-side, so destroying the container never loses Claude progress; the **Manifest** lets it be reconstructed
 - The **Manifest** is **Local Data** (like the **Prompt Cache** and **Snapshot**); **Sandbox Config**'s portable tier is **Shared Metadata**, its machine-specific tier is **Local Data**
-- A **Sandbox** has no credentials and never touches the remote; it deposits a **PR Suggestion** that a host-side **Submit** turns into a pushed branch and a real PR
-- **Sandbox Status** is published by hooks gated on `SR_SANDBOX`, so the same hooks in the mounted `~/.claude` stay inert during normal host sessions
+- A **Sandbox** has no credentials and never touches the remote; it records a **PR Suggestion** as **Branch Context** (key `pr`) that a host-side **Submit** reads to open the PR
+- A **PR Suggestion** is **Branch Context**, so like all **Branch Context** it is lost on squash — the sandbox should set it after any squash, before teardown
+- **Sandbox Status** is published by hooks loaded via a sandbox-only `--settings` file (ADR-0011), so the developer's `~/.claude` is never mutated; `SR_SANDBOX` only tells the hook which sandbox it is
 - **Watch** and the **Prompt Cache** both consume **Sandbox Status**: the Prompt Cache surfaces an ambient awaiting-count; **Watch** surfaces the full dashboard
 
 ## Example dialogue
@@ -170,5 +171,5 @@ _Avoid_: draft PR (that's a GitHub state), PR info (that's the created-PR metada
 - **"stack" as verb vs. noun** — resolved: the noun means the dependency structure; "restack" is the operation that restores it to validity. Never use "stack" as a verb meaning "to add a branch."
 - **"rebase" vs. "restack"** — resolved: rebase is git's operation; restack is stackr's higher-level operation that coordinates multiple rebases.
 - **"context" ambiguity** — resolved: two levels exist. **Branch Context** is high-level (decisions, approach). **Commit Context** is per-step (plan references, agent reasoning). Both are structured JSON, both live in the graph, both are lost on squash.
-- **"fork" vs. "sandbox"** — resolved: the feature is named **Sandbox** (`sr sandbox`). "Fork" is avoided in user-facing terms because it collides with git forks; it survives only in internal paths (`.git/.stackr/forks/`, `stackr-fork:base`) for brevity.
+- **"fork" vs. "sandbox"** — resolved: the feature is named **Sandbox** (`sr sandbox`) end-to-end. "Fork" is eliminated from all sandbox naming (internal paths, image tags, labels) to avoid collision with git forks; the word survives only in its unrelated stack sense (an **Upstack** that branches).
 - **"session" ambiguity** — a Claude session (the JSONL conversation under `~/.claude/projects`) vs. a zellij session (the multiplexer instance inside the container). The **Sandbox** hosts a zellij session that runs a Claude session; **Attach** connects to the zellij session, **resume**/`--continue` reconstructs the Claude session.

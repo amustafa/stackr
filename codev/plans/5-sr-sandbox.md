@@ -4,14 +4,14 @@
 - **ID**: plan-2026-07-06-sr-sandbox
 - **Status**: draft
 - **Specification**: codev/specs/5-sr-sandbox.md
-- **ADRs**: 0008 (path-identical mount), 0009 (disposable + host state), 0010 (no creds / PR suggestions)
+- **ADRs**: 0008 (path-identical mount), 0009 (disposable + host state), 0010 (no creds / PR suggestions), 0011 (hooks via --settings)
 - **Created**: 2026-07-06
 
 ## Executive Summary
 
-Bottom-up build following the codebase's layering: a thin Docker CLI wrapper and base-image provisioning first, then the Local-Data types (manifest / status / suggestion) and sandbox config, then the core launch/attach/lifecycle engine, then the attention hooks, then the surfacing layer (searchable `ls`/attach, watch dashboard, prompt-cache count), then submit integration for credential-free PR suggestions, and finally command wiring + skill install.
+Bottom-up build following the codebase's layering: a thin Docker CLI wrapper and base-image provisioning first, then the Local-Data types (manifest / status) and sandbox config, then the core launch/attach/lifecycle engine, then the attention hooks, then the surfacing layer (searchable `ls`/attach, watch dashboard, prompt-cache count), then submit integration for credential-free PR suggestions (via a reserved Branch Context key), and finally command wiring + skill install.
 
-The two hardest pieces are **mount assembly** (path-identical worktree + shared `.git` + `~/.claude` + caches + PATH, all at real host paths, running as host UID:GID — ADR-0008) and the **env-gated attention hooks** (installed into the mounted `~/.claude` but inert outside a sandbox). Everything else composes around Docker CLI calls and files under `.git/.stackr/`.
+The two hardest pieces are **mount assembly** (path-identical worktree + shared `.git` + `~/.claude` + caches + PATH, all at real host paths, running as host UID:GID — ADR-0008) and the **attention hooks**, provided via a per-invocation `--settings` file so `~/.claude` is never mutated (ADR-0011). Everything else composes around Docker CLI calls and files under `.git/.stackr/`.
 
 ## Success Metrics
 - [ ] All spec MUST criteria met
@@ -19,8 +19,8 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - [ ] Session continuity verified: a sandbox session appears in host `claude --resume`
 - [ ] No root-owned files created on the host by a sandbox
 - [ ] Second sandbox launch does no image rebuild and no dep re-download
-- [ ] Attention hooks inert during normal host Claude sessions
-- [ ] Sandbox has zero GitHub credentials; host `sr submit` consumes a deposited PR Suggestion
+- [ ] Attention hooks provided via `--settings`; `~/.claude` never mutated
+- [ ] Sandbox has zero GitHub credentials; host `sr submit` reads a PR Suggestion from the reserved `pr` Branch Context entry
 - [ ] All tests pass (existing + new)
 
 ## Phases (Machine Readable)
@@ -33,11 +33,11 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
     {"id": "phase_3", "title": "Phase 3: Local-Data types — manifest, status, suggestion"},
     {"id": "phase_4", "title": "Phase 4: Sandbox config (three-tier) + auto-derivation"},
     {"id": "phase_5", "title": "Phase 5: Core engine — mount assembly, launch, attach, stop, rm"},
-    {"id": "phase_6", "title": "Phase 6: Attention hooks (env-gated) + status publishing"},
+    {"id": "phase_6", "title": "Phase 6: Attention hooks via --settings + status publishing"},
     {"id": "phase_7", "title": "Phase 7: Searchable selector, sr sandbox ls, attach TUI"},
     {"id": "phase_8", "title": "Phase 8: Watch dashboard + --notify + prompt-cache count"},
     {"id": "phase_9", "title": "Phase 9: sr sandbox config TUI + --ai"},
-    {"id": "phase_10", "title": "Phase 10: PR Suggestion deposit + host submit consume"},
+    {"id": "phase_10", "title": "Phase 10: PR Suggestion via reserved Branch Context key + submit consume"},
     {"id": "phase_11", "title": "Phase 11: Command wiring, skill install, README"}
   ]
 }
@@ -72,30 +72,30 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 #### Deliverables
 - [ ] `assets/Dockerfile.base` embedded via `go:embed`; installs `git`, `gh`, `curl`, ca-certs, `zellij`, the `claude` CLI, and `sr`.
-- [ ] `internal/sandbox/image.go` — `EnsureImage(cfg)`: build base if absent (tag `stackr-fork:base`); if `.stackr/fork/Dockerfile` exists, build/refresh the per-project layer `FROM` base, tag `stackr-fork:<repo-hash>`.
+- [ ] `internal/sandbox/image.go` — `EnsureImage(cfg)`: build base if absent (tag `stackr-sandbox:base`); if `.stackr/sandbox/Dockerfile` exists, build/refresh the per-project layer `FROM` base, tag `stackr-sandbox:<repo-hash>`.
 - [ ] Content-hash tagging so an unchanged Dockerfile is a cache hit; rebuild only on change.
 
 #### Acceptance Criteria
 - [ ] First call builds; subsequent calls no-op (image exists, hash unchanged).
-- [ ] Repo with `.stackr/fork/Dockerfile` → project image derived from base; repo without → base used directly.
+- [ ] Repo with `.stackr/sandbox/Dockerfile` → project image derived from base; repo without → base used directly.
 
 ---
 
-### Phase 3: Local-Data types — manifest, status, suggestion
+### Phase 3: Local-Data types — manifest, status
 **Dependencies**: None (can run parallel to 1–2)
 
 #### Objectives
-- Typed read/write for the three per-branch artifacts under `.git/.stackr/`.
+- Typed read/write for the per-branch Local-Data artifacts under `<main .git>/.stackr/sandboxes/` (located via `ctx.Store.Root()` / `GitCommonDir()`, never `c.Git.Dir`).
 
 #### Deliverables
-- [ ] `internal/sandbox/manifest.go` — `Manifest{Branch, Image, Mounts, Command, SessionID}` ↔ `.git/.stackr/forks/<branch>.json`.
-- [ ] `internal/sandbox/status.go` — `Status{State, Reason, UpdatedAt}` (states: `working`, `awaiting-input`, `awaiting-choice`, `exited`) ↔ `.git/.stackr/forks/<branch>.status`; plus a `Watch(dir)` helper (fsnotify or poll) emitting change events.
-- [ ] `internal/sandbox/suggestion.go` — `Suggestion{Title, Body, CreatedAt}` ↔ `.git/.stackr/pr-suggestions/<branch>.json`; `Read`, `Write`, `Clear`.
-- [ ] Ensure `.git/.stackr/` paths are Local Data (never in refs/stackr/data); confirm they're outside the worktree.
+- [ ] `internal/sandbox/manifest.go` — `Manifest{Branch, Image, Mounts, Command, SessionID}` ↔ `.git/.stackr/sandboxes/<branch>.json`.
+- [ ] `internal/sandbox/status.go` — `Status{State, Reason, UpdatedAt}` (states: `working`, `awaiting-input`, `awaiting-choice`, `exited`) ↔ `.git/.stackr/sandboxes/<branch>.status`; plus a `Watch(dir)` helper (fsnotify or poll) emitting change events.
+- [ ] Ensure paths resolve under the shared `.git/.stackr/` (never in refs/stackr/data), correct even from a worktree.
 - [ ] Unit tests: round-trip each type; `Watch` fires on write.
+- (PR Suggestion is **not** a file here — it is a reserved `pr` Branch Context entry; see Phase 10.)
 
 #### Acceptance Criteria
-- [ ] Round-trip fidelity for all three types.
+- [ ] Round-trip fidelity for both types.
 - [ ] Files land under the main repo's `.git/.stackr/`, not the worktree.
 
 ---
@@ -158,24 +158,24 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 ---
 
-### Phase 6: Attention hooks (env-gated) + status publishing
-**Dependencies**: Phase 3 (status), Phase 5 (SR_SANDBOX env)
+### Phase 6: Attention hooks via --settings + status publishing
+**Dependencies**: Phase 3 (status), Phase 5 (launch injects `--settings` + `SR_SANDBOX`)
 
 #### Objectives
-- Publish Sandbox Status from Claude Code hooks, inert on the host.
+- Publish Sandbox Status from Claude Code hooks, without mutating the developer's `~/.claude` (ADR-0011).
 
 #### Implementation Details
-- Install hook entries into the mounted `~/.claude` settings (idempotent, marked/owned block) mapping: `PreToolUse:AskUserQuestion`→`awaiting-choice`, `Stop`→`awaiting-input`, `Notification`→`awaiting-input`, `UserPromptSubmit`→`working`, `SessionEnd`→`exited`.
-- Hook command is a small script that **no-ops unless `$SR_SANDBOX` is set**, then writes `.git/.stackr/forks/$SR_SANDBOX.status` with state + a `reason` extracted from the hook payload (last message / tool input).
+- Generate a **sandbox-only settings JSON** (not written into `~/.claude`) with hook entries mapping: `PreToolUse:AskUserQuestion`→`awaiting-choice`, `Stop`→`awaiting-input`, `Notification`→`awaiting-input`, `UserPromptSubmit`→`working`, `SessionEnd`→`exited`. Phase 5 passes it via `claude --settings <file>` (additive over the mounted `~/.claude`). The sandbox's main session must **not** use `--bare` (skips hooks).
+- Hook command is a small embedded script that writes the status file for the current sandbox. It locates the file via `git rev-parse --git-common-dir` → `<main .git>/.stackr/sandboxes/$SR_SANDBOX.status` (mounted, host-visible), with `reason` extracted from the hook payload (last message / tool input). `SR_SANDBOX` identifies the branch.
 
 #### Deliverables
-- [ ] `internal/sandbox/hooks.go` — install/uninstall the gated hook block; the status-writer script (embedded).
-- [ ] Idempotent install (safe across many sandboxes sharing one `~/.claude`).
-- [ ] Tests: script writes correct state given a sample payload; no-op when `SR_SANDBOX` unset.
+- [ ] `internal/sandbox/hooks.go` — build the sandbox settings JSON + the status-writer script (embedded).
+- [ ] Status path resolved via the shared git dir (`ctx.Store.Root()` semantics), never `c.Git.Dir` (worktree root).
+- [ ] Tests: script writes correct state given a sample payload; settings JSON has the expected hook wiring.
 
 #### Acceptance Criteria
 - [ ] Awaiting transitions produce the right state + reason.
-- [ ] Normal host session (no `SR_SANDBOX`) writes nothing.
+- [ ] `~/.claude/settings.json` is never modified; removing a sandbox leaves no trace.
 
 ---
 
@@ -232,19 +232,25 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 ---
 
-### Phase 10: PR Suggestion deposit + host submit consume
-**Dependencies**: Phase 3 (suggestion)
+### Phase 10: PR Suggestion via reserved Branch Context key + submit consume
+**Dependencies**: None (touches existing context/submit; no new Local-Data type)
 
 #### Objectives
-- Credential-free PR flow (ADR-0010).
+- Credential-free PR flow reusing Branch Context (ADR-0010) — no new file or command.
+
+#### Implementation Details
+- Reserve context key `pr` for a proposed PR title/body (title/body split TBD — single entry vs. branch Description for title). Document it so users don't collide.
+- Sandbox side: the agent records it with the existing `sr context set pr "…"` — nothing new to build; the sandbox skill instructs the agent to do so before teardown (and again after any squash, since Branch Context is lost on squash).
+- Host side: `internal/engine/prepare.go` / `submit.go` — if the branch has a `pr` context entry, use it as the PR title/body directly (offer edit), skipping AI regeneration; otherwise fall back to existing generation.
 
 #### Deliverables
-- [ ] Deposit mode (e.g. `sr submit --deposit`) — generate/accept title+body and persist a Suggestion instead of pushing.
-- [ ] `internal/engine/submit.go` — on host `sr submit`, detect a Suggestion for the branch → confirm → push branch → create/update PR with it → `Clear()`.
-- [ ] Tests: deposit round-trips; consume path calls push + PR-create with suggestion fields and clears on success.
+- [ ] `submit`/`prepare` read + special-case the reserved `pr` entry.
+- [ ] Reserved-key documented (README + sandbox skill).
+- [ ] Tests: branch with a `pr` entry → submit uses it as title/body; branch without → existing generation path unchanged.
 
 #### Acceptance Criteria
-- [ ] Sandbox (no creds) deposits; host `sr submit` turns it into a pushed branch + PR; suggestion cleared.
+- [ ] Sandbox (no creds) sets `pr` context; host `sr submit` opens/updates the PR from it.
+- [ ] Existing submit behavior unchanged when no `pr` entry is present.
 
 ---
 
@@ -272,12 +278,12 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - **Session-hash assumption** (hash derived purely from cwd path) → verify against the installed Claude Code version before relying on it; fall back to explicit `--resume <id>` from the manifest if the hash scheme differs.
 - **Shared `~/.claude` hook install races** across concurrent sandboxes → idempotent, marked block; write-with-rename.
 - **`zellij`/`claude` version drift in the base image** → pin versions in `Dockerfile.base`; content-hash tag forces rebuild on bump.
-- **fsnotify on `.git`** may be noisy → watch only `.git/.stackr/forks/` and debounce.
+- **fsnotify on `.git`** may be noisy → watch only `.git/.stackr/sandboxes/` and debounce.
 
 ## Open Questions (from spec, to resolve during implementation)
 - Base-image provisioning: build-on-first-use vs optional prebuilt registry image.
 - Cold-restart zellij mapping: `--continue` vs `--resume <id>` selection.
-- PR Suggestion JSON shape + deposit flag name + host consume UX (auto vs confirm).
+- PR Suggestion reserved key (`pr`) — title/body split + host consume UX (auto vs confirm-edit).
 - Watch right-pane content (detail/preview assumed; confirm with user).
 
 ## Consultation Log

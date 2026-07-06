@@ -47,7 +47,7 @@ sr sandbox <branch> -- "<initial prompt>"
 ```
 
 This creates/reuses the worktree, ensures the base image (and any per-project
-`.stackr/fork/Dockerfile` layer), starts the container detached, launches
+`.stackr/sandbox/Dockerfile` layer), starts the container detached, launches
 zellij → Claude, prints the identifier (the branch name), and attaches you.
 
 ## Reconnecting & listing
@@ -62,9 +62,10 @@ Detaching (zellij detach or closing the terminal) leaves the sandbox running.
 
 ## Knowing when a sandbox needs you
 
-Skip-permissions stops permission prompts, not genuine questions. Env-gated Claude
-Code hooks publish each sandbox's interaction state to
-`.git/.stackr/forks/<branch>.status` (`working` / `awaiting-input` /
+Skip-permissions stops permission prompts, not genuine questions. Claude Code
+hooks — loaded via a sandbox-only `--settings` file (ADR-0011), never installed
+into your `~/.claude` — publish each sandbox's interaction state to
+`.git/.stackr/sandboxes/<branch>.status` (`working` / `awaiting-input` /
 `awaiting-choice` / `exited`) with the pending question text. It's surfaced three ways:
 
 ```bash
@@ -109,15 +110,17 @@ Destroying a container never loses Claude progress — the session lives in
 ## Pushing & PRs (host-side)
 
 The sandbox has **no GitHub credentials** (ADR-0010) — it cannot push or open PRs.
-The agent commits to the branch (already in the shared `.git`) and **deposits a
-PR Suggestion** at `.git/.stackr/pr-suggestions/<branch>.json`. Then, on the host:
+The agent commits to the branch (already in the shared `.git`) and records a
+**PR Suggestion** as a reserved Branch Context entry:
 
 ```bash
-sr submit            # detects the deposited suggestion, pushes, creates/updates the PR
+sr context set pr "<proposed PR title/body>"   # inside the sandbox, before teardown
 ```
 
-Prefer this over mounting credentials into the sandbox. Direct-push is possible
-only if the user explicitly opts into mounting a token — never the default.
+Then, on the host, `sr submit` reads the reserved `pr` entry and uses it as the
+PR title/body directly (offer edit → push → create/update). Branch Context is
+lost on squash, so set `pr` after any squash. Prefer this over mounting
+credentials into the sandbox — direct-push is never the default.
 
 ## Configuration
 
