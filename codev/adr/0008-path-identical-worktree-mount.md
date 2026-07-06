@@ -10,6 +10,8 @@ This has a decisive second benefit. Claude Code files each session's JSONL under
 
 Because the slug derives from the **worktree** path, sandbox sessions are keyed to that worktree, so they are resumed from the worktree on the host (`cd .worktrees/<branch> && claude --resume`, or `sr sandbox attach`) — not from the repo root. The exact-string match means the mount path must be **canonicalized** (`filepath.EvalSymlinks`) so the container's slug matches the host's byte-for-byte.
 
+**Verified end-to-end** (throwaway repo + real `stackr-sandbox:base` run): a container at the worktree path, running as the host uid with `~/.claude` mounted, committed inside (visible on the host, owned by the host user), and `claude -p` produced a session JSONL under `~/.claude/projects/<worktree-slug>` — the exact slug computed by `ProjectSlug`. **Correction from that run:** Claude Code's config is split between the `~/.claude/` *directory* and a separate `~/.claude.json` *file* in HOME; **both** must be mounted (same paths), or `claude` aborts with "configuration file not found." The mount set is therefore `~/.claude`, `~/.claude.json`, the worktree, and the shared `.git`.
+
 ## Alternatives considered
 
 - **Isolated local clone** — give the container its own independent `.git` (true git isolation: it cannot touch the main repo's objects/refs). Rejected: heavier, requires reconciling commits back, and contradicts the "always a worktree" requirement. Path-hash continuity would still need path identity.

@@ -132,6 +132,7 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - worktree `<repo>/.worktrees/<branch>` → same path (cwd)
 - `<repo>/.git` → same path (rw, shared — ADR-0008)
 - `~/.claude` → same path (rw)
+- `~/.claude.json` → same path (rw) — **required**; Claude's main config file lives here (verified: claude aborts without it)
 - caches (auto-derived, if `Caches`) → same paths
 - bin dir `.stackr/sandbox/bin` + machine `PathMounts` → same paths, composed into `PATH`
 - machine `ExtraMounts` → as configured

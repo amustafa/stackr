@@ -48,6 +48,7 @@ We want the productivity of skip-permissions **without** exposing the host: run 
 host                                             container (disposable, run -d)
 ────                                             ──────────────────────────────
 ~/.claude/            ──bind rw (same path)──▶   ~/.claude/           (config, skills, creds, projects/)
+~/.claude.json        ──bind rw (same path)──▶   ~/.claude.json       (main config — REQUIRED; claude aborts without it)
 <repo>/.git/          ──bind rw (same path)──▶   <repo>/.git/         (shared object store + refs)
 <repo>/.worktrees/B/  ──bind rw (same path)──▶   <repo>/.worktrees/B/ (cwd; isolated working tree)
 ~/go/pkg/mod, caches  ──bind rw (auto)───────▶   same paths           (warm deps)
