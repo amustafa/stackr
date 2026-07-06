@@ -128,7 +128,7 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 #### Implementation Details
 
-**Mount assembly** (`internal/engine/sandbox.go`) — all at real host paths:
+**Mount assembly** (`internal/engine/sandbox.go`) — all at real host paths, **canonicalized via `filepath.EvalSymlinks`** so the container's cwd slug matches the host's byte-for-byte (session continuity depends on the exact path — ADR-0008):
 - worktree `<repo>/.worktrees/<branch>` → same path (cwd)
 - `<repo>/.git` → same path (rw, shared — ADR-0008)
 - `~/.claude` → same path (rw)
@@ -279,7 +279,7 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 ## Risks & Mitigations
 - **UID not in image `/etc/passwd`** → git/tools unhappy. Mitigate: inject `GIT_*` identity env; optionally synthesize a passwd entry at entrypoint.
-- **Session-hash assumption** (hash derived purely from cwd path) → verify against the installed Claude Code version before relying on it; fall back to explicit `--resume <id>` from the manifest if the hash scheme differs.
+- **Session-slug assumption** — *empirically confirmed* (ADR-0008): the project dir is the slugified absolute cwd path, not a content hash; worktrees already key separately. Residual risk is only path canonicalization (symlinks/trailing slash) → mitigated by `EvalSymlinks`. Keep `--resume <id>` from the manifest as a belt-and-suspenders fallback.
 - **Shared `~/.claude` hook install races** across concurrent sandboxes → idempotent, marked block; write-with-rename.
 - **`zellij`/`claude` version drift in the base image** → pin versions in `Dockerfile.base`; content-hash tag forces rebuild on bump.
 - **fsnotify on `.git`** may be noisy → watch only `.git/.stackr/sandboxes/` and debounce.

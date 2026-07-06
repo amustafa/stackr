@@ -6,7 +6,9 @@
 
 Bind-mount the worktree and the main repo's `.git` at their **real host paths**, set the container's working directory to the worktree path, and share `.git` **read-write**.
 
-This has a decisive second benefit. Claude Code files each session's JSONL under `~/.claude/projects/<hash>`, where `<hash>` derives from the working directory path. Because the container's `cwd` equals the host worktree path (and `~/.claude` is mounted at the same path), the container computes the **same project hash as the host** — session logs land in the shared history and host `claude --resume` sees the sandbox's work with zero extra machinery.
+This has a decisive second benefit. Claude Code files each session's JSONL under `~/.claude/projects/<slug>`, where `<slug>` is the **slugified absolute working-directory path** (`/`→`-`) — empirically confirmed against `~/.claude/projects`, which already contains per-worktree entries like `-home-amustafa-workspace-ftron--worktrees-am-...`. It is a path slug, **not** a content hash. Because the container's `cwd` equals the host worktree path (and `~/.claude` is mounted at the same path), the container produces the **same slug as the host** — session logs land in the shared history with zero extra machinery.
+
+Because the slug derives from the **worktree** path, sandbox sessions are keyed to that worktree, so they are resumed from the worktree on the host (`cd .worktrees/<branch> && claude --resume`, or `sr sandbox attach`) — not from the repo root. The exact-string match means the mount path must be **canonicalized** (`filepath.EvalSymlinks`) so the container's slug matches the host's byte-for-byte.
 
 ## Alternatives considered
 
