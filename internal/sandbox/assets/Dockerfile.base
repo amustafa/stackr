@@ -3,8 +3,8 @@
 # .stackr/sandbox/Dockerfile (FROM stackr-sandbox:base), not here.
 #
 # node base gives node+npm for the Claude CLI; iptables/ipset back the egress
-# firewall (ADR-0012); the sr binary is copied from the build context by
-# EnsureBaseImage so the sandbox runs the exact host sr version.
+# firewall (ADR-0012). The sr binary is NOT baked in — it is bind-mounted at
+# runtime so the image stays stable and the sandbox always runs the current sr.
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -26,9 +26,5 @@ RUN curl -fsSL https://github.com/zellij-org/zellij/releases/latest/download/zel
 
 # Claude Code CLI.
 RUN npm install -g @anthropic-ai/claude-code
-
-# sr binary — supplied in the build context by EnsureBaseImage.
-COPY sr /usr/local/bin/sr
-RUN chmod +x /usr/local/bin/sr
 
 WORKDIR /

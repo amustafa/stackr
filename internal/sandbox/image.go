@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -13,14 +11,23 @@ import (
 	"github.com/amustafa/stackr/internal/store"
 )
 
-//go:embed assets/Dockerfile.base
+//go:embed assets/Dockerfile.base assets/firewall-init.sh
 var assets embed.FS
 
 func baseDockerfile() []byte {
-	data, err := assets.ReadFile("assets/Dockerfile.base")
+	return mustAsset("assets/Dockerfile.base")
+}
+
+// FirewallScript returns the embedded egress-allowlist init script (ADR-0012).
+func FirewallScript() []byte {
+	return mustAsset("assets/firewall-init.sh")
+}
+
+func mustAsset(name string) []byte {
+	data, err := assets.ReadFile(name)
 	if err != nil {
 		// Embedded at build time; a read failure is a programming error.
-		panic("sandbox: embedded Dockerfile.base missing: " + err.Error())
+		panic("sandbox: embedded asset missing: " + name + ": " + err.Error())
 	}
 	return data
 }
@@ -38,18 +45,19 @@ func contentHash(parts ...[]byte) string {
 }
 
 // EnsureBaseImage builds the shared base image if absent or stale, and returns
-// its tag (store.DefaultBaseImage). It is a cache hit — no docker build — when
-// the image exists and the embedded Dockerfile hash matches the last build,
-// recorded at <stackrDir>/sandbox-base.hash. srBinary is the path to the sr
-// executable to bake in (typically os.Executable()).
-func EnsureBaseImage(dr *docker.Runner, stackrDir, srBinary string) (string, error) {
-	tag := store.DefaultBaseImage
+// the stable tag (store.DefaultBaseImage). Staleness is global and needs no
+// bookkeeping file: the image is content-addressed by its Dockerfile
+// (stackr-sandbox:base-<hash>) with the stable :base tag as an alias, so an
+// unchanged Dockerfile is a cache hit for every repo. sr is not baked in — it
+// is bind-mounted at launch — so an sr rebuild never invalidates the image.
+func EnsureBaseImage(dr *docker.Runner) (string, error) {
+	stable := store.DefaultBaseImage
 	dockerfile := baseDockerfile()
-	want := contentHash(dockerfile)
-	hashFile := filepath.Join(stackrDir, "sandbox-base.hash")
+	contentTag := stable + "-" + contentHash(dockerfile)
 
-	if dr.ImageExists(tag) && readHash(hashFile) == want {
-		return tag, nil
+	if dr.ImageExists(contentTag) {
+		_ = dr.Tag(contentTag, stable) // keep the stable alias current
+		return stable, nil
 	}
 
 	ctxDir, err := os.MkdirTemp("", "stackr-sandbox-base-*")
@@ -58,20 +66,17 @@ func EnsureBaseImage(dr *docker.Runner, stackrDir, srBinary string) (string, err
 	}
 	defer os.RemoveAll(ctxDir)
 
-	if err := os.WriteFile(filepath.Join(ctxDir, "Dockerfile"), dockerfile, 0o644); err != nil {
+	dfPath := filepath.Join(ctxDir, "Dockerfile")
+	if err := os.WriteFile(dfPath, dockerfile, 0o644); err != nil {
 		return "", err
 	}
-	if err := copyFile(srBinary, filepath.Join(ctxDir, "sr"), 0o755); err != nil {
-		return "", fmt.Errorf("staging sr binary into build context: %w", err)
-	}
-	if err := dr.Build(ctxDir, filepath.Join(ctxDir, "Dockerfile"), tag); err != nil {
+	if err := dr.Build(ctxDir, dfPath, contentTag); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(stackrDir, 0o755); err != nil {
+	if err := dr.Tag(contentTag, stable); err != nil {
 		return "", err
 	}
-	_ = os.WriteFile(hashFile, []byte(want), 0o644)
-	return tag, nil
+	return stable, nil
 }
 
 // EnsureProjectImage builds the optional per-project image layer if the repo
@@ -97,29 +102,4 @@ func EnsureProjectImage(dr *docker.Runner, mainRoot, dockerfilePath, baseTag str
 		return "", err
 	}
 	return tag, nil
-}
-
-func readHash(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Chmod(mode)
 }

@@ -40,7 +40,7 @@ type Status struct {
 const statusSuffix = ".status"
 
 func statusPath(dir, branch string) string {
-	return filepath.Join(dir, encodeBranch(branch)+statusSuffix)
+	return filepath.Join(dir, EncodeBranch(branch)+statusSuffix)
 }
 
 // WriteStatus persists a status under dir (creating dir if needed).

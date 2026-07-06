@@ -31,7 +31,7 @@ type Manifest struct {
 
 // manifestPath returns the manifest file path for a branch within dir.
 func manifestPath(dir, branch string) string {
-	return filepath.Join(dir, encodeBranch(branch)+".json")
+	return filepath.Join(dir, EncodeBranch(branch)+".json")
 }
 
 // WriteManifest persists a manifest under dir (creating dir if needed).

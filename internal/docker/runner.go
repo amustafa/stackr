@@ -214,6 +214,12 @@ func (r *Runner) Build(contextDir, dockerfile, tag string) error {
 	return r.Run("build", "-f", dockerfile, "-t", tag, contextDir)
 }
 
+// Tag adds dst as an alias for the src image.
+func (r *Runner) Tag(src, dst string) error {
+	_, err := r.RunCapture("tag", src, dst)
+	return err
+}
+
 func sortedKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// encodeBranch makes a branch name safe as a flat filename. Git ref rules
+// EncodeBranch makes a branch name safe as a flat filename. Git ref rules
 // forbid every filesystem-hostile character except "/", so encoding just "/"
 // as "%2F" is sufficient and reversible — and trivial to reproduce in the
 // Phase-6 bash hook (${SR_SANDBOX//\//%2F}).
-func encodeBranch(branch string) string {
+func EncodeBranch(branch string) string {
 	return strings.ReplaceAll(branch, "/", "%2F")
 }
 
