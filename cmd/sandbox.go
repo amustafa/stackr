@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/amustafa/stackr/internal/engine"
+	"github.com/amustafa/stackr/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -48,11 +49,41 @@ var sandboxAttachCmd = &cobra.Command{
 		if err := ctx.RequireInit(); err != nil {
 			return err
 		}
-		if len(args) == 0 {
-			return fmt.Errorf("interactive picker not yet implemented — pass a branch: sr sandbox attach <branch>")
+		branch := ""
+		if len(args) > 0 {
+			branch = args[0]
+		} else {
+			picked, err := pickSandbox()
+			if err != nil {
+				return err
+			}
+			branch = picked
 		}
-		return engine.SandboxAttach(ctx, args[0])
+		return engine.SandboxAttach(ctx, branch)
 	},
+}
+
+// pickSandbox shows the searchable picker over this repo's sandboxes.
+func pickSandbox() (string, error) {
+	infos, err := engine.SandboxList(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(infos) == 0 {
+		return "", fmt.Errorf("no sandboxes running — launch one with: sr sandbox <branch>")
+	}
+	items := make([]ui.FilterItem, 0, len(infos))
+	for _, in := range infos {
+		detail := "running"
+		if in.Status != nil {
+			detail = string(in.Status.State)
+			if in.Status.Reason != "" {
+				detail += " — " + in.Status.Reason
+			}
+		}
+		items = append(items, ui.FilterItem{Value: in.Branch, Label: in.Branch, Detail: detail})
+	}
+	return ui.FilterSelect("Attach to sandbox", items)
 }
 
 var sandboxLsCmd = &cobra.Command{
