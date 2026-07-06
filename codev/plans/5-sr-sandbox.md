@@ -4,7 +4,7 @@
 - **ID**: plan-2026-07-06-sr-sandbox
 - **Status**: draft
 - **Specification**: codev/specs/5-sr-sandbox.md
-- **ADRs**: 0008 (path-identical mount), 0009 (disposable + host state), 0010 (no creds / PR suggestions), 0011 (hooks via --settings)
+- **ADRs**: 0008 (path-identical mount), 0009 (disposable + host state), 0010 (no creds / PR suggestions), 0011 (hooks via --settings), 0012 (egress allowlist default)
 - **Created**: 2026-07-06
 
 ## Executive Summary
@@ -107,7 +107,7 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - Portable + machine-specific config, with everything else auto-derived.
 
 #### Deliverables
-- [ ] `internal/store/config.go` — add `Sandbox` sub-struct (portable): `Network`, `BaseImage`, `DockerfilePath`, `FirewallAllowlist`, `Caches bool`, `PromptTemplate`, `BinDir`, `WatchScope`.
+- [ ] `internal/store/config.go` — add `Sandbox` sub-struct (portable): `Network` (default `allowlist`; `full` opt-out — ADR-0012), `BaseImage`, `DockerfilePath`, `FirewallAllowlist` (seeded with Anthropic + GitHub + `proxy.golang.org`/`sum.golang.org`/`registry.npmjs.org`/PyPI), `Caches bool`, `PromptTemplate`, `BinDir`, `WatchScope`.
 - [ ] `internal/sandbox/localconfig.go` — machine-specific loader for `.git/.stackr/sandbox.local.json`: `CachePaths`, `ExtraMounts`, `PathMounts`, `DockerSocket`.
 - [ ] `internal/sandbox/derive.go` — auto-derivations: worktree path for a branch, repo root, `.git` dir, HOME, `UID:GID`, project hash.
 - [ ] Config precedence resolver → an effective `LaunchConfig` consumed by Phase 5.
@@ -138,7 +138,8 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 
 **Launch**:
 - `docker run -d` as host `UID:GID`, `HOME=<host home>`, `-e SR_SANDBOX=<branch>`, `-e GIT_AUTHOR_*/GIT_COMMITTER_*`, `-e PATH=<composed>`, label `stackr.sandbox=<repo-hash>`, workdir = worktree path.
-- Command: `zellij attach --create <branch>` running `claude --dangerously-skip-permissions "<prompt>"` (or plain `claude` if no prompt). Cold-resume path uses `claude --continue`.
+- **Firewall (default, ADR-0012)**: `--cap-add=NET_ADMIN`; an entrypoint init runs `iptables`/`ipset` to allow only the allowlist (Anthropic + GitHub + registries + config additions) before the agent starts. `--network full` skips it.
+- Command: `zellij attach --create <branch>` running `claude --settings <sandbox-settings.json> --dangerously-skip-permissions "<prompt>"` (or plain `claude` if no prompt; **not** `--bare`). Cold-resume path uses `claude --continue`. The launch injects an initial system prompt telling the agent it is firewalled + how to request a domain (ADR-0012).
 - Write the manifest.
 
 **Attach**: `docker exec -it <container> zellij attach <branch>` (shared by `sandbox` auto-attach and `attach`).
@@ -148,13 +149,16 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - [ ] `internal/engine/sandbox.go` — `SandboxRun`, `SandboxAttach`, `SandboxStop`, `SandboxRm`, `SandboxList`.
 - [ ] Worktree ensure reuses `engine.WorktreeAdd` (fires `post-worktree` hook — ADR-0006).
 - [ ] Git identity env injected so commits work despite a UID absent from image `/etc/passwd`.
-- [ ] Integration test (docker-gated): launch → exec `id -u` matches host, `pwd` = worktree path, `git status` works, a written file is host-owned.
+- [ ] Firewall init script (embedded) + allowlist assembly from config; `--network full` bypass.
+- [ ] `BuildSandboxSystemPrompt()` (analogous to `BuildAISystemPrompt`) — injected via `--append-system-prompt`: explains the firewall + request-to-add-domain protocol, and that the agent should record a PR Suggestion via `sr context set pr` before teardown.
+- [ ] Integration test (docker-gated): launch → exec `id -u` matches host, `pwd` = worktree path, `git status` works, a written file is host-owned; allowlisted host reachable, non-allowlisted blocked.
 
 #### Acceptance Criteria
 - [ ] Session continuity: sandbox session JSONL lands in host `~/.claude/projects/<same-hash>`.
 - [ ] No root-owned files on host.
 - [ ] `rm` keeps worktree by default; `--delete` removes it.
 - [ ] Relaunch after `rm` cold-resumes via `--continue`.
+- [ ] Egress allowlist enforced by default; `--network full` disables it.
 
 ---
 
@@ -279,6 +283,8 @@ The two hardest pieces are **mount assembly** (path-identical worktree + shared 
 - **Shared `~/.claude` hook install races** across concurrent sandboxes → idempotent, marked block; write-with-rename.
 - **`zellij`/`claude` version drift in the base image** → pin versions in `Dockerfile.base`; content-hash tag forces rebuild on bump.
 - **fsnotify on `.git`** may be noisy → watch only `.git/.stackr/sandboxes/` and debounce.
+- **DNS-based allowlisting is fragile** (IPs rotate: GitHub, registries) → resolve allowlist domains at init into an `ipset`, allow that set; document that some CDNs may need re-resolution or a domain re-add. Reference Anthropic's devcontainer `init-firewall.sh` pattern.
+- **`NET_ADMIN` in a skip-permissions container** is a privilege → contained to the container netns; acceptable, but note it in docs.
 
 ## Open Questions (from spec, to resolve during implementation)
 - Base-image provisioning: build-on-first-use vs optional prebuilt registry image.

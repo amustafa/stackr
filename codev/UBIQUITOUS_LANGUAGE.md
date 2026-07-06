@@ -118,6 +118,10 @@ User-chosen sandbox settings, split three ways: **portable** (git-ref `config.js
 **Sandbox Bin Dir / PATH Mounts**:
 Two config-driven ways to put extra executables on the container's `PATH`. The **Sandbox Bin Dir** is a portable repo-local folder (default `.stackr/sandbox/bin/`), prepended to `PATH`. **PATH Mounts** are machine-specific host directories bind-mounted at their real paths and added to `PATH`. Host binaries must match the container's OS/arch/libc.
 
+**Firewall Allowlist**:
+The set of egress domains a **Sandbox** may reach — the default network posture (ADR-0012). Seeded with the Anthropic API, GitHub, and common package registries; a portable config field a repo can extend. When the agent needs a blocked domain it **requests** it (surfaced as an awaiting **Sandbox Status**); the developer adds it and relaunches. `--network full` disables the firewall.
+_Avoid_: whitelist (use allowlist).
+
 **Base Image**:
 The single cached Docker image (`stackr-sandbox:base`) every sandbox runs from, holding the universal toolchain. A repo may extend it with a per-project `.stackr/sandbox/Dockerfile`. Containers differ only by their bind mounts and launch command, never by bespoke image builds.
 
@@ -151,6 +155,7 @@ _Avoid_: draft PR (a GitHub state); a separate file (it is not — it is a **Bra
 - A **PR Suggestion** is **Branch Context**, so like all **Branch Context** it is lost on squash — the sandbox should set it after any squash, before teardown
 - **Sandbox Status** is published by hooks loaded via a sandbox-only `--settings` file (ADR-0011), so the developer's `~/.claude` is never mutated; `SR_SANDBOX` only tells the hook which sandbox it is
 - **Watch** and the **Prompt Cache** both consume **Sandbox Status**: the Prompt Cache surfaces an ambient awaiting-count; **Watch** surfaces the full dashboard
+- A **Sandbox** runs behind the **Firewall Allowlist** by default; a blocked-domain request surfaces as an awaiting **Sandbox Status**, and adding the domain is the same config-edit-then-relaunch flow as any other added context
 
 ## Example dialogue
 

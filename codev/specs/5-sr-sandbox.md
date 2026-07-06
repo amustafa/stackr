@@ -35,6 +35,7 @@ We want the productivity of skip-permissions **without** exposing the host: run 
 - Per **ADR-0009**: the container is disposable; durable state is host-side. In-container installs are ephemeral by design.
 - Per **ADR-0010**: the sandbox carries **no GitHub credentials** and performs no authenticated remote operations. The sandbox records a **PR Suggestion** as a reserved `pr` **Branch Context** entry; host-side `sr submit` reads it to open the PR. Guiding principle: prefer host-side revocable operations over durable secrets in a skip-permissions box.
 - Per **ADR-0011**: attention hooks are provided via `claude --settings <file>` (additive over the mounted `~/.claude`), never installed into the developer's global `~/.claude/settings.json`. The sandbox's main session must not use `--bare` (which skips hooks).
+- Per **ADR-0012**: the sandbox defaults to an **egress allowlist firewall**; blocked domains are requested by the agent and added to the allowlist config + relaunched. `--network full` is an explicit opt-out.
 - Requires Docker on the host. The feature is a no-op / clear error where Docker is unavailable.
 - The base image and all mounts are **bind mounts**; no per-sandbox image builds and no named-volume copies (efficiency requirement — see Solution).
 - One sandbox per branch (git allows a branch in only one worktree at a time).
@@ -73,7 +74,7 @@ Shared base: `git`, `gh`, `curl`/ca-certificates, the `claude` CLI, `zellij`, an
 
 - **Identity** = branch name. `sr sandbox feat-x` → worktree/container for `feat-x`.
 - **Process user** = host `UID:GID` with `HOME` set to the real host home and `~/.claude` mounted there, so all writes to the worktree / `.git` / `~/.claude` are owned by the developer (no root-owned litter). Git identity inside the container is supplied via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (or a synthesized passwd entry) since the UID may not exist in the image.
-- **Network** = full in v1 (Docker still isolates host filesystem/processes — the dominant risk of skip-permissions). A `--firewall` egress-allowlist mode (Anthropic + GitHub + package registries via iptables) is documented as a later hardening upgrade.
+- **Network** = **egress allowlist by default** (ADR-0012), enforced via an `iptables`/`ipset` init step (`--cap-add=NET_ADMIN`). The allowlist ships with Anthropic API + GitHub + common package registries and is a portable config field. The agent is told it is firewalled and must **request** any blocked domain; the developer adds it to the allowlist and relaunches (the ADR-0009 add-context-and-restart flow). A `--network full` opt-out remains for accepted-risk cases.
 
 ### Lifecycle
 
@@ -212,6 +213,8 @@ The sandbox has no GitHub credentials (ADR-0010), so it never pushes or opens PR
 - Only one image build per project; subsequent sandboxes reuse cached images and only differ by mounts + command.
 - The sandbox has **no** GitHub credentials — no ssh keys, no gh token, no credential helper; authenticated remote ops fail inside the container.
 - The sandbox records a PR Suggestion via `sr context set pr …`; host-side `sr submit` reads the reserved entry and uses it as the PR title/body (offer edit → push → create/update).
+- The sandbox runs behind the egress allowlist by default: allowlisted hosts reachable, others blocked; the agent's initial instructions describe the firewall + request-to-add protocol.
+- Adding a domain to the allowlist config + relaunch makes it reachable; `--network full` disables the firewall.
 - When a sandbox session ends its turn / asks a question / presents options, its status file flips to an awaiting state with the pending text; replying flips it back to `working`.
 - The attention hooks are inert during normal host Claude sessions (not gated `SR_SANDBOX`).
 - `sr sandbox ls` / attach TUI show a status column + pending-question text; the shell prompt shows a count of awaiting sandboxes.
@@ -252,6 +255,8 @@ The sandbox has no GitHub credentials (ADR-0010), so it never pushes or opens PR
 17. **Watch dashboard**: two sandboxes, one awaiting → watch app shows it in the top section; hotkey jumps to it; click attaches; detach returns to the dashboard.
 18. **Notify mode**: `sr sandbox watch --notify`, trigger an awaiting transition → desktop notification fires; no UI shown.
 19. **Binaries on PATH**: drop a binary in `.stackr/sandbox/bin/` and add a host dir via config → both are on `PATH` inside the sandbox.
+20. **Firewall default**: sandbox reaches `api.anthropic.com` and GitHub but a non-allowlisted host is blocked; agent's initial instructions mention requesting a domain.
+21. **Allowlist add**: add a domain to the allowlist config, relaunch → host now reachable. `--network full` → firewall disabled.
 
 ## Open Questions
 

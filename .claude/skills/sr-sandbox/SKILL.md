@@ -79,6 +79,22 @@ In the watch dashboard: up/down or click to navigate, a hotkey jumps to the firs
 awaiting session, clicking a session attaches to it. Scope defaults to the current
 project (config) or `--all`.
 
+## The sandbox is firewalled
+
+By default the sandbox runs behind an egress **allowlist** (Anthropic + GitHub +
+common registries — ADR-0012). If the agent needs a blocked domain, it should
+**request** it rather than treat the failure as transient. To grant it, add the
+domain to the allowlist and relaunch:
+
+```bash
+sr sandbox config          # add the domain to the firewall allowlist
+sr sandbox <branch>        # relaunch — resumes the session with the new allowlist
+# or, for accepted-risk cases:
+sr sandbox <branch> --network full
+```
+
+Adding a domain is just the "add context, then restart and resume" flow.
+
 ## Extra binaries in the sandbox
 
 Two config-driven ways to put executables on the sandbox `PATH`:
