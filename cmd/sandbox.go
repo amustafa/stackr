@@ -3,7 +3,10 @@ package cmd
 import (
 	"fmt"
 
+	"strings"
+
 	"github.com/amustafa/stackr/internal/engine"
+	"github.com/amustafa/stackr/internal/store"
 	"github.com/amustafa/stackr/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -140,6 +143,69 @@ var sandboxRmCmd = &cobra.Command{
 	},
 }
 
+var sandboxConfigAI bool
+
+var sandboxConfigCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Show/edit sandbox config (TUI), or --ai to have Claude help",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := ctx.RequireInit(); err != nil {
+			return err
+		}
+		if sandboxConfigAI {
+			return engine.SandboxConfigAI(ctx)
+		}
+		return runSandboxConfigTUI()
+	},
+}
+
+func runSandboxConfigTUI() error {
+	cfg, err := ctx.Store.ReadConfig()
+	if err != nil {
+		return err
+	}
+	r := cfg.Sandbox.Resolved()
+	extras := ""
+	if cfg.Sandbox != nil {
+		extras = strings.Join(cfg.Sandbox.FirewallAllowlist, ",")
+	}
+	fields := []ui.FormField{
+		{Key: "network", Label: "Network (allowlist|full)", Kind: ui.FieldText, Value: r.Network, Required: true},
+		{Key: "baseImage", Label: "Base image", Kind: ui.FieldText, Value: r.BaseImage},
+		{Key: "dockerfilePath", Label: "Per-project Dockerfile", Kind: ui.FieldText, Value: r.DockerfilePath},
+		{Key: "binDir", Label: "Sandbox bin dir", Kind: ui.FieldText, Value: r.BinDir},
+		{Key: "watchScope", Label: "Watch scope (project|all)", Kind: ui.FieldText, Value: r.WatchScope},
+		{Key: "allowlist", Label: "Extra firewall domains (comma-sep)", Kind: ui.FieldText, Value: extras},
+		{Key: "caches", Label: "Mount caches", Kind: ui.FieldToggle, Toggle: r.CachesEnabled()},
+	}
+	res, err := ui.Form("Sandbox config", fields)
+	if err != nil {
+		return err
+	}
+	sc := &store.SandboxConfig{
+		Network:        res.Values["network"],
+		BaseImage:      res.Values["baseImage"],
+		DockerfilePath: res.Values["dockerfilePath"],
+		BinDir:         res.Values["binDir"],
+		WatchScope:     res.Values["watchScope"],
+	}
+	if v := strings.TrimSpace(res.Values["allowlist"]); v != "" {
+		for _, d := range strings.Split(v, ",") {
+			if d = strings.TrimSpace(d); d != "" {
+				sc.FirewallAllowlist = append(sc.FirewallAllowlist, d)
+			}
+		}
+	}
+	caches := res.Toggles["caches"]
+	sc.Caches = &caches
+	cfg.Sandbox = sc
+	if err := ctx.Store.WriteConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Println("Sandbox config saved.")
+	return nil
+}
+
 var sandboxWatchNotify bool
 
 var sandboxWatchCmd = &cobra.Command{
@@ -224,6 +290,8 @@ func init() {
 	sandboxRmCmd.Flags().BoolVar(&sandboxRmDelete, "delete", false, "also remove the worktree and branch")
 
 	sandboxWatchCmd.Flags().BoolVar(&sandboxWatchNotify, "notify", false, "headless: desktop notifications on transition to awaiting")
+	sandboxConfigCmd.Flags().BoolVar(&sandboxConfigAI, "ai", false, "let Claude help manage the config")
+	sandboxCmd.AddCommand(sandboxConfigCmd)
 
 	sandboxCmd.AddCommand(sandboxAttachCmd)
 	sandboxCmd.AddCommand(sandboxLsCmd)
