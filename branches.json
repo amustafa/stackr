@@ -11,7 +11,7 @@
     "spec-5-sr-sandbox": {
       "parentBranchName": "main",
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
-      "branchRevision": "9fcd61bd03470faa37504a2956ba401e582f189c",
+      "branchRevision": "ff66c8fcb349379a654764f61d6bc1f07ef5371a",
       "children": [],
       "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
     }
