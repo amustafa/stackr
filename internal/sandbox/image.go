@@ -11,7 +11,7 @@ import (
 	"github.com/amustafa/stackr/internal/store"
 )
 
-//go:embed assets/Dockerfile.base assets/firewall-init.sh
+//go:embed assets/Dockerfile.base assets/firewall-init.sh assets/status-writer.js
 var assets embed.FS
 
 func baseDockerfile() []byte {

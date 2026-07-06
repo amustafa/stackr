@@ -183,9 +183,27 @@ func launchContainer(c *context.Context, dr *docker.Runner, spec launchSpec, nam
 	if err := os.MkdirAll(sbDir, 0o755); err != nil {
 		return err
 	}
+	// Attention hooks: write the status-writer script + a sandbox-only claude
+	// settings file that wires the hooks to it (ADR-0011). Both live under the
+	// shared .git (mounted), so the container reads them at their host paths.
+	enc := sandbox.EncodeBranch(spec.Branch)
+	scriptPath := filepath.Join(sbDir, "status-writer.js")
+	if err := os.WriteFile(scriptPath, sandbox.StatusWriterScript(), 0o644); err != nil {
+		return err
+	}
+	settings, err := sandbox.BuildSettings(scriptPath)
+	if err != nil {
+		return err
+	}
+	settingsPath := filepath.Join(sbDir, enc+".settings.json")
+	if err := os.WriteFile(settingsPath, settings, 0o644); err != nil {
+		return err
+	}
+	spec.SettingsFile = settingsPath
+
 	// Layout + firewall script live under the shared .git (mounted at the same
 	// path), so the container reads them at their host paths.
-	layoutPath := filepath.Join(sbDir, sandbox.EncodeBranch(spec.Branch)+".layout.kdl")
+	layoutPath := filepath.Join(sbDir, enc+".layout.kdl")
 	if err := os.WriteFile(layoutPath, []byte(buildLayout(spec)), 0o644); err != nil {
 		return err
 	}
