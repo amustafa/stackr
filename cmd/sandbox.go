@@ -140,6 +140,55 @@ var sandboxRmCmd = &cobra.Command{
 	},
 }
 
+var sandboxWatchNotify bool
+
+var sandboxWatchCmd = &cobra.Command{
+	Use:   "watch",
+	Short: "Live dashboard of sandboxes (or --notify for desktop notifications)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := ctx.RequireInit(); err != nil {
+			return err
+		}
+		if sandboxWatchNotify {
+			return engine.SandboxNotify(ctx)
+		}
+		fetch := func() []ui.WatchRow {
+			infos, err := engine.SandboxList(ctx)
+			if err != nil {
+				return nil
+			}
+			rows := make([]ui.WatchRow, 0, len(infos))
+			for _, in := range infos {
+				row := ui.WatchRow{Branch: in.Branch, State: "running"}
+				if in.Status != nil {
+					row.State = string(in.Status.State)
+					row.Reason = in.Status.Reason
+					row.Awaiting = in.Status.State.Awaiting()
+				}
+				rows = append(rows, row)
+			}
+			return rows
+		}
+		return ui.RunWatch("Sandboxes", fetch, engine.SandboxAttachCommand)
+	},
+}
+
+var sandboxAwaitingCmd = &cobra.Command{
+	Use:   "awaiting",
+	Short: "Print the number of sandboxes awaiting input (for prompts)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := ctx.RequireInit(); err != nil {
+			return err
+		}
+		n, err := engine.SandboxAwaitingCount(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Println(n)
+		return nil
+	},
+}
+
 // splitSandboxArgs separates the branch from the post-`--` prompt.
 func splitSandboxArgs(cmd *cobra.Command, args []string) (branch, prompt string) {
 	dashIdx := cmd.ArgsLenAtDash()
@@ -174,9 +223,13 @@ func init() {
 	sandboxCmd.Flags().BoolVar(&sandboxFlagNoAttach, "no-attach", false, "launch without attaching")
 	sandboxRmCmd.Flags().BoolVar(&sandboxRmDelete, "delete", false, "also remove the worktree and branch")
 
+	sandboxWatchCmd.Flags().BoolVar(&sandboxWatchNotify, "notify", false, "headless: desktop notifications on transition to awaiting")
+
 	sandboxCmd.AddCommand(sandboxAttachCmd)
 	sandboxCmd.AddCommand(sandboxLsCmd)
 	sandboxCmd.AddCommand(sandboxStopCmd)
 	sandboxCmd.AddCommand(sandboxRmCmd)
+	sandboxCmd.AddCommand(sandboxWatchCmd)
+	sandboxCmd.AddCommand(sandboxAwaitingCmd)
 	rootCmd.AddCommand(sandboxCmd)
 }
