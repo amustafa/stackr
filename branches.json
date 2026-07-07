@@ -8,12 +8,20 @@
       ],
       "isTrunk": true
     },
+    "skill-redesign": {
+      "parentBranchName": "spec-5-sr-sandbox",
+      "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
+      "branchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
+      "children": [],
+      "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles"
+    },
     "spec-5-sr-sandbox": {
       "parentBranchName": "main",
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
       "branchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "children": [
-        "spec-6-sr-implement"
+        "spec-6-sr-implement",
+        "skill-redesign"
       ],
       "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
     },
