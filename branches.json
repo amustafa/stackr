@@ -13,7 +13,13 @@
       "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "children": [],
-      "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles"
+      "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Unified the 3 Claude skills (stackr/sr-sandbox/sr-implement) into ONE skill at .claude/skills/stackr/ with progressive disclosure: SKILL.md + sandbox.md + implement.md"
+        }
+      ]
     },
     "spec-5-sr-sandbox": {
       "parentBranchName": "main",
