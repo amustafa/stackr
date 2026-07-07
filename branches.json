@@ -9,9 +9,9 @@
       "isTrunk": true
     },
     "skill-redesign": {
-      "parentBranchName": "spec-5-sr-sandbox",
-      "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
-      "branchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
+      "parentBranchName": "spec-6-sr-implement",
+      "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
+      "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "children": [],
       "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles"
     },
@@ -20,8 +20,7 @@
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
       "branchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "children": [
-        "spec-6-sr-implement",
-        "skill-redesign"
+        "spec-6-sr-implement"
       ],
       "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
     },
@@ -29,7 +28,9 @@
       "parentBranchName": "spec-5-sr-sandbox",
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "children": [],
+      "children": [
+        "skill-redesign"
+      ],
       "description": "sr implement: issue → tracked branch → implement"
     }
   }
