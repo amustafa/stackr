@@ -32,6 +32,10 @@
               "reference": "codev/adr/0003-cli-over-mcp.md"
             }
           ]
+        },
+        {
+          "key": "design",
+          "text": "Defer command flags to 'sr --help' (drift-proof); keep only compact command MAP inline so agents can discover commands they'd otherwise never --help"
         }
       ]
     },
