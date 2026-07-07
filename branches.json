@@ -11,7 +11,7 @@
     "skill-redesign": {
       "parentBranchName": "spec-6-sr-implement",
       "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "branchRevision": "9fa2610916e087d03b5f12fde8b9673784d6fcc2",
+      "branchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
       "children": [],
       "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles",
       "context": [
