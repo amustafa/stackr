@@ -1,0 +1,11 @@
+{
+  "branches": {
+    "spec-5-sr-sandbox": {
+      "number": 7,
+      "title": "Spec 5: sr sandbox — sandboxed Claude sessions on isolated worktrees",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/7",
+      "baseBranch": "main"
+    }
+  }
+}
