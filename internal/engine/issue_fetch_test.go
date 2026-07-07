@@ -96,7 +96,7 @@ func TestStripANSI(t *testing.T) {
 // Live fetch is gated on the tool being present; it never runs in CI without
 // gh/jira installed (mirrors the docker-gated sandbox tests).
 func TestFetchIssueUnknownSource(t *testing.T) {
-	if _, err := fetchIssue(Source("gitlab"), "1", false); err == nil {
+	if _, err := fetchIssue(Source("gitlab"), "1", "1", false); err == nil {
 		t.Error("expected error for unknown source")
 	}
 }

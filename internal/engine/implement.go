@@ -70,11 +70,11 @@ func insideClaude() bool {
 // Implement fetches an issue, creates a new tracked branch for it, records the
 // linkage, and drives implementation per flags/context (ADR-0013 for fetch).
 func Implement(c *context.Context, opts ImplementOpts) error {
-	source, ref, err := detectSource(opts.Ref, opts.Source)
+	source, ref, locator, err := detectSource(opts.Ref, opts.Source)
 	if err != nil {
 		return err
 	}
-	iss, err := fetchIssue(source, ref, opts.Comments)
+	iss, err := fetchIssue(source, ref, locator, opts.Comments)
 	if err != nil {
 		return err
 	}
@@ -94,42 +94,56 @@ func Implement(c *context.Context, opts ImplementOpts) error {
 
 	worktree := opts.Worktree || opts.Sandbox
 	kind := chooseDrive(opts.Sandbox, opts.AI, c.Interactive, insideClaude())
-	// In hand-off/emit modes stdout must be clean JSON, so silence engine chatter.
-	if kind == driveEmitJSON || kind == driveSandboxDetached {
+	// In hand-off/emit modes stdout is a data channel (JSON), so silence our own
+	// prints and route git/docker subprocess chatter to stderr (see quietStdout).
+	emitting := kind == driveEmitJSON || kind == driveSandboxDetached
+	if emitting {
 		c.Quiet = true
 	}
 
-	// Parent handling: branch off the current branch unless --parent overrides.
-	orig, err := c.Git.CurrentBranch()
+	scaffold := func() error {
+		// Parent handling: branch off the current branch unless --parent overrides.
+		orig, err := c.Git.CurrentBranch()
+		if err != nil {
+			return err
+		}
+		parentChanged := false
+		if opts.Parent != "" && opts.Parent != orig {
+			if err := c.Git.Checkout(opts.Parent); err != nil {
+				return fmt.Errorf("could not switch to parent %q: %w", opts.Parent, err)
+			}
+			parentChanged = true
+		}
+
+		if err := Create(c, CreateOpts{
+			Name:     branch,
+			Desc:     fmt.Sprintf("%s: %s", iss.displayRef(), iss.Title),
+			Worktree: worktree,
+		}); err != nil {
+			return err
+		}
+
+		// When a worktree holds the work, the caller's checkout shouldn't have
+		// moved to the parent — restore where they started.
+		if worktree && parentChanged {
+			if err := c.Git.Checkout(orig); err != nil && !c.Quiet {
+				fmt.Printf("Warning: could not restore branch %q: %v\n", orig, err)
+			}
+		}
+
+		if err := setTicketContext(c, branch, iss); err != nil && !c.Quiet {
+			fmt.Printf("Warning: could not record ticket context: %v\n", err)
+		}
+		return nil
+	}
+
+	if emitting {
+		err = quietStdout(scaffold)
+	} else {
+		err = scaffold()
+	}
 	if err != nil {
 		return err
-	}
-	parentChanged := false
-	if opts.Parent != "" && opts.Parent != orig {
-		if err := c.Git.Checkout(opts.Parent); err != nil {
-			return fmt.Errorf("could not switch to parent %q: %w", opts.Parent, err)
-		}
-		parentChanged = true
-	}
-
-	if err := Create(c, CreateOpts{
-		Name:     branch,
-		Desc:     fmt.Sprintf("%s: %s", iss.displayRef(), iss.Title),
-		Worktree: worktree,
-	}); err != nil {
-		return err
-	}
-
-	// When a worktree holds the work, the caller's checkout shouldn't have moved
-	// to the parent — restore where they started.
-	if worktree && parentChanged {
-		if err := c.Git.Checkout(orig); err != nil && !c.Quiet {
-			fmt.Printf("Warning: could not restore branch %q: %v\n", orig, err)
-		}
-	}
-
-	if err := setTicketContext(c, branch, iss); err != nil && !c.Quiet {
-		fmt.Printf("Warning: could not record ticket context: %v\n", err)
 	}
 
 	prompt := buildPrompt(iss, branch, opts.Comments)
@@ -156,13 +170,26 @@ func Implement(c *context.Context, opts ImplementOpts) error {
 		return SandboxRun(c, SandboxRunOpts{Branch: branch, Prompt: prompt, Network: opts.Network, Attach: true})
 
 	case driveSandboxDetached:
-		if err := SandboxRun(c, SandboxRunOpts{Branch: branch, Prompt: prompt, Network: opts.Network, Attach: false}); err != nil {
+		if err := quietStdout(func() error {
+			return SandboxRun(c, SandboxRunOpts{Branch: branch, Prompt: prompt, Network: opts.Network, Attach: false})
+		}); err != nil {
 			return err
 		}
 		res.AttachCommand = fmt.Sprintf("sr sandbox attach %s", branch)
 		return emitImplementJSON(res)
 	}
 	return nil
+}
+
+// quietStdout runs fn with os.Stdout pointed at os.Stderr, so subprocess output
+// that git/docker send to stdout (checkout diagnostics, "HEAD is now at", …) is
+// kept off our JSON data channel. Restores os.Stdout before returning. Safe for
+// this single-threaded CLI; not concurrency-safe.
+func quietStdout(fn func() error) error {
+	orig := os.Stdout
+	os.Stdout = os.Stderr
+	defer func() { os.Stdout = orig }()
+	return fn()
 }
 
 // setTicketContext records the issue reference as a `ticket` branch-context entry.

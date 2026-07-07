@@ -11,11 +11,13 @@ import (
 )
 
 // fetchIssue resolves an Issue from its source. Fetching happens host-side
-// (ADR-0013) so no credentials or network reach the sandbox.
-func fetchIssue(source Source, ref string, withComments bool) (Issue, error) {
+// (ADR-0013) so no credentials or network reach the sandbox. ref is the display
+// ref stored on the Issue; locator is what the source CLI is queried with (they
+// differ only for a GitHub URL — see detectSource).
+func fetchIssue(source Source, ref, locator string, withComments bool) (Issue, error) {
 	switch source {
 	case SourceGitHub:
-		return fetchGitHubIssue(ref, withComments)
+		return fetchGitHubIssue(ref, locator, withComments)
 	case SourceJira:
 		return fetchJiraIssue(ref, withComments)
 	default:
@@ -25,7 +27,7 @@ func fetchIssue(source Source, ref string, withComments bool) (Issue, error) {
 
 // --- GitHub (gh) ---
 
-func fetchGitHubIssue(ref string, withComments bool) (Issue, error) {
+func fetchGitHubIssue(ref, locator string, withComments bool) (Issue, error) {
 	if err := ghCheckInstalled(); err != nil {
 		return Issue{}, err
 	}
@@ -33,7 +35,7 @@ func fetchGitHubIssue(ref string, withComments bool) (Issue, error) {
 	if withComments {
 		fields += ",comments"
 	}
-	out, err := runIssueCmd("gh", "issue", "view", ref, "--json", fields)
+	out, err := runIssueCmd("gh", "issue", "view", locator, "--json", fields)
 	if err != nil {
 		return Issue{}, fmt.Errorf("fetching GitHub issue %s: %w", ref, err)
 	}

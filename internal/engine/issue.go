@@ -50,49 +50,64 @@ var (
 	jiraKeyRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9]+-\d+)$`)
 )
 
-// detectSource resolves an issue reference to a source and normalized ref.
-// override, when non-empty, forces the source ("github" or "jira") and the ref
-// is normalized for that source (erroring if it doesn't fit). With no override,
-// the source is auto-detected by shape: issue URLs, then #?digits (GitHub), then
-// KEY-N (Jira). Ambiguous input is an error rather than a guess.
-func detectSource(ref, override string) (Source, string, error) {
+// detectSource resolves an issue reference to a source, a normalized display
+// ref, and a fetch locator. The display ref is what names the branch and reads
+// in prose ("123", "PROJ-456"); the locator is what to hand the source CLI. They
+// differ only for a GitHub URL, whose locator stays the full URL so `gh` targets
+// the right repo rather than assuming the current one.
+//
+// override, when non-empty, forces the source ("github" or "jira"), erroring if
+// the ref doesn't fit. With no override, the source is auto-detected by shape:
+// issue URLs, then #?digits (GitHub), then KEY-N (Jira). Ambiguous input errors.
+func detectSource(ref, override string) (src Source, displayRef, locator string, err error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return "", "", fmt.Errorf("an issue reference is required")
+		return "", "", "", fmt.Errorf("an issue reference is required")
 	}
 
 	switch strings.ToLower(strings.TrimSpace(override)) {
 	case "github":
 		n, err := extractGitHubNumber(ref)
 		if err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
-		return SourceGitHub, n, nil
+		return SourceGitHub, n, githubLocator(ref, n), nil
 	case "jira":
 		k, err := extractJiraKey(ref)
 		if err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
-		return SourceJira, k, nil
+		return SourceJira, k, k, nil
 	case "":
 		// auto-detect below
 	default:
-		return "", "", fmt.Errorf("invalid --source %q (want github or jira)", override)
+		return "", "", "", fmt.Errorf("invalid --source %q (want github or jira)", override)
 	}
 
 	if m := ghURLRe.FindStringSubmatch(ref); m != nil {
-		return SourceGitHub, m[1], nil
+		return SourceGitHub, m[1], ref, nil // locator = the URL (correct repo)
 	}
 	if m := jiraURLRe.FindStringSubmatch(ref); m != nil {
-		return SourceJira, strings.ToUpper(m[1]), nil
+		key := strings.ToUpper(m[1])
+		return SourceJira, key, key, nil
 	}
 	if m := ghNumRe.FindStringSubmatch(ref); m != nil {
-		return SourceGitHub, m[1], nil
+		return SourceGitHub, m[1], m[1], nil
 	}
 	if m := jiraKeyRe.FindStringSubmatch(ref); m != nil {
-		return SourceJira, strings.ToUpper(m[1]), nil
+		key := strings.ToUpper(m[1])
+		return SourceJira, key, key, nil
 	}
-	return "", "", fmt.Errorf("could not determine issue source from %q — pass --source github|jira", ref)
+	return "", "", "", fmt.Errorf("could not determine issue source from %q — pass --source github|jira", ref)
+}
+
+// githubLocator returns the URL when the input was one (so gh targets that repo),
+// otherwise the bare number (current repo).
+func githubLocator(input, number string) string {
+	if ghURLRe.MatchString(input) {
+		return input
+	}
+	return number
 }
 
 // extractGitHubNumber pulls a GitHub issue number from a URL or a #?digits ref.

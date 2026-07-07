@@ -12,21 +12,22 @@ func TestDetectSource(t *testing.T) {
 		override string
 		want     Source
 		wantRef  string
+		wantLoc  string
 		wantErr  bool
 	}{
-		{name: "plain number", ref: "123", want: SourceGitHub, wantRef: "123"},
-		{name: "hash number", ref: "#123", want: SourceGitHub, wantRef: "123"},
-		{name: "jira key", ref: "PROJ-456", want: SourceJira, wantRef: "PROJ-456"},
-		{name: "jira key lowercased", ref: "proj-456", want: SourceJira, wantRef: "PROJ-456"},
-		{name: "jira key with digit in project", ref: "AB2-9", want: SourceJira, wantRef: "AB2-9"},
-		{name: "github url", ref: "https://github.com/owner/repo/issues/42", want: SourceGitHub, wantRef: "42"},
-		{name: "jira browse url", ref: "https://co.atlassian.net/browse/PROJ-456", want: SourceJira, wantRef: "PROJ-456"},
-		{name: "self-hosted jira browse url", ref: "https://jira.internal/browse/team-7", want: SourceJira, wantRef: "TEAM-7"},
-		{name: "whitespace trimmed", ref: "  123  ", want: SourceGitHub, wantRef: "123"},
+		{name: "plain number", ref: "123", want: SourceGitHub, wantRef: "123", wantLoc: "123"},
+		{name: "hash number", ref: "#123", want: SourceGitHub, wantRef: "123", wantLoc: "123"},
+		{name: "jira key", ref: "PROJ-456", want: SourceJira, wantRef: "PROJ-456", wantLoc: "PROJ-456"},
+		{name: "jira key lowercased", ref: "proj-456", want: SourceJira, wantRef: "PROJ-456", wantLoc: "PROJ-456"},
+		{name: "jira key with digit in project", ref: "AB2-9", want: SourceJira, wantRef: "AB2-9", wantLoc: "AB2-9"},
+		{name: "github url keeps url as locator", ref: "https://github.com/owner/repo/issues/42", want: SourceGitHub, wantRef: "42", wantLoc: "https://github.com/owner/repo/issues/42"},
+		{name: "jira browse url", ref: "https://co.atlassian.net/browse/PROJ-456", want: SourceJira, wantRef: "PROJ-456", wantLoc: "PROJ-456"},
+		{name: "self-hosted jira browse url", ref: "https://jira.internal/browse/team-7", want: SourceJira, wantRef: "TEAM-7", wantLoc: "TEAM-7"},
+		{name: "whitespace trimmed", ref: "  123  ", want: SourceGitHub, wantRef: "123", wantLoc: "123"},
 
-		{name: "override github on number", ref: "77", override: "github", want: SourceGitHub, wantRef: "77"},
-		{name: "override jira on key", ref: "abc-1", override: "jira", want: SourceJira, wantRef: "ABC-1"},
-		{name: "override github on url", ref: "https://github.com/o/r/issues/9", override: "GitHub", want: SourceGitHub, wantRef: "9"},
+		{name: "override github on number", ref: "77", override: "github", want: SourceGitHub, wantRef: "77", wantLoc: "77"},
+		{name: "override jira on key", ref: "abc-1", override: "jira", want: SourceJira, wantRef: "ABC-1", wantLoc: "ABC-1"},
+		{name: "override github on url keeps url", ref: "https://github.com/o/r/issues/9", override: "GitHub", want: SourceGitHub, wantRef: "9", wantLoc: "https://github.com/o/r/issues/9"},
 
 		{name: "empty", ref: "", wantErr: true},
 		{name: "ambiguous word", ref: "banana", wantErr: true},
@@ -38,10 +39,10 @@ func TestDetectSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src, ref, err := detectSource(tc.ref, tc.override)
+			src, ref, loc, err := detectSource(tc.ref, tc.override)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("expected error, got source=%q ref=%q", src, ref)
+					t.Fatalf("expected error, got source=%q ref=%q loc=%q", src, ref, loc)
 				}
 				return
 			}
@@ -53,6 +54,9 @@ func TestDetectSource(t *testing.T) {
 			}
 			if ref != tc.wantRef {
 				t.Errorf("ref = %q, want %q", ref, tc.wantRef)
+			}
+			if loc != tc.wantLoc {
+				t.Errorf("locator = %q, want %q", loc, tc.wantLoc)
 			}
 		})
 	}
