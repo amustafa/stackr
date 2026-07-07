@@ -22,6 +22,16 @@
         {
           "key": "rationale",
           "text": "Cross-skill refs aren't load-bearing (skills load independently); same-dir progressive disclosure IS reliable. One description routes all 3 intents. Kills 3-way drift + mechanism split."
+        },
+        {
+          "key": "decision",
+          "text": "Stayed with skill over MCP per ADR-0003 (MCP built+removed; CLI already emits JSON via --aiprepare; ~50 tools = permanent context tax)",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "codev/adr/0003-cli-over-mcp.md"
+            }
+          ]
         }
       ]
     },
