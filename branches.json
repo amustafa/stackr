@@ -18,6 +18,10 @@
         {
           "key": "approach",
           "text": "sr claude install injects a marker-delimited stackr pointer block into CLAUDE.md (always-on), closing the gap where the skill's description might not trigger before an agent reaches for raw git"
+        },
+        {
+          "key": "design",
+          "text": "Managed block is a POINTER not a copy of the skill (drift-safe); idempotent write/update/append; uninstall strips it; --no-prompt-block opts out. Logic in cmd/prompt_block.go"
         }
       ]
     },
