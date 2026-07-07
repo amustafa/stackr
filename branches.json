@@ -1,6 +1,12 @@
 {
   "version": 1,
   "branches": {
+    "am/bugfix-submit-ai": {
+      "parentBranchName": "skill-prompt-block",
+      "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
+      "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
+      "children": []
+    },
     "main": {
       "branchRevision": "d5d270896e628633450629af006d26d560a25072",
       "children": [
@@ -12,7 +18,9 @@
       "parentBranchName": "skill-redesign",
       "parentBranchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
       "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "children": [],
+      "children": [
+        "am/bugfix-submit-ai"
+      ],
       "description": "sr claude install injects an always-on stackr pointer block into CLAUDE.md (managed, idempotent, reversible, --no-prompt-block opt-out)",
       "context": [
         {
