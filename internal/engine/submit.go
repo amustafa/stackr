@@ -85,6 +85,7 @@ func submitAIPrepare(c *context.Context) error {
 	if err != nil {
 		return err
 	}
+	result.Prompt = BuildAISystemPrompt()
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal aiprepare result: %w", err)
