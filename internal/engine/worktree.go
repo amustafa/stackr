@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/amustafa/stackr/internal/context"
+	"github.com/amustafa/stackr/internal/sandbox"
 )
 
 // WorktreeAddOpts holds options for adding a worktree.
@@ -22,10 +23,28 @@ type WorktreeRemoveOpts struct {
 	Delete bool // also delete the branch
 }
 
-// WorktreeAdd creates a worktree for the named branch under .worktrees/.
+// worktreesRoot returns the absolute path of the .worktrees directory that holds
+// all of this repo's worktrees. It is anchored on the MAIN repo root (the
+// directory containing the shared .git), NOT the current checkout — so the
+// location is identical whether sr runs from the main checkout or from inside
+// another worktree. This keeps it in lockstep with the sandbox's canonical
+// worktree path (ADR-0008) and avoids nesting a .worktrees pyramid when a
+// worktree is created from within a worktree.
+func worktreesRoot(c *context.Context) (string, error) {
+	gitCommon, err := absGitCommonDir(c)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(sandbox.MainRoot(gitCommon), ".worktrees"), nil
+}
+
+// WorktreeAdd creates a worktree for the named branch under the main repo's
+// .worktrees/ directory.
 func WorktreeAdd(c *context.Context, opts WorktreeAddOpts) error {
-	root := c.Git.Dir
-	wtDir := filepath.Join(root, ".worktrees")
+	wtDir, err := worktreesRoot(c)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(wtDir, 0o755); err != nil {
 		return fmt.Errorf("creating .worktrees dir: %w", err)
@@ -45,26 +64,30 @@ func WorktreeAdd(c *context.Context, opts WorktreeAddOpts) error {
 		}
 	}
 
-	wtPath := filepath.Join(".worktrees", opts.Name)
+	// Use an absolute path so `git worktree add` lands under the main root
+	// regardless of the current working directory.
+	wtPath := filepath.Join(wtDir, opts.Name)
 	if err := c.Git.WorktreeAdd(wtPath, opts.Name); err != nil {
 		return err
 	}
 
-	absWtPath := filepath.Join(root, wtPath)
-
-	if err := runPostWorktreeHook(c, absWtPath); err != nil && !c.Quiet {
+	if err := runPostWorktreeHook(c, wtPath); err != nil && !c.Quiet {
 		fmt.Printf("Warning: post-worktree hook failed: %v\n", err)
 	}
 
 	if !c.Quiet {
-		fmt.Printf("Created worktree for %q at %s\n", opts.Name, absWtPath)
+		fmt.Printf("Created worktree for %q at %s\n", opts.Name, wtPath)
 	}
 	return nil
 }
 
 // WorktreeRemove removes a worktree and optionally deletes the branch.
 func WorktreeRemove(c *context.Context, opts WorktreeRemoveOpts) error {
-	wtPath := filepath.Join(".worktrees", opts.Name)
+	wtDir, err := worktreesRoot(c)
+	if err != nil {
+		return err
+	}
+	wtPath := filepath.Join(wtDir, opts.Name)
 	if err := c.Git.WorktreeRemove(wtPath); err != nil {
 		return err
 	}
@@ -85,9 +108,11 @@ func WorktreeRemove(c *context.Context, opts WorktreeRemoveOpts) error {
 	return nil
 }
 
-// ensureGitExclude adds ".worktrees" to .git/info/exclude if not already present.
+// ensureGitExclude adds ".worktrees" to the shared .git/info/exclude if not
+// already present. It targets the common git dir (not the per-worktree gitdir)
+// so the exclude covers the main repo, where the .worktrees directory lives.
 func ensureGitExclude(c *context.Context) error {
-	gitDir, err := c.Git.GitDir()
+	gitDir, err := absGitCommonDir(c)
 	if err != nil {
 		return err
 	}

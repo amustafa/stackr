@@ -149,7 +149,11 @@ func Implement(c *context.Context, opts ImplementOpts) error {
 	prompt := buildPrompt(iss, branch, opts.Comments)
 	worktreePath := ""
 	if worktree {
-		worktreePath = filepath.Join(c.Git.Dir, ".worktrees", branch)
+		wtDir, err := worktreesRoot(c)
+		if err != nil {
+			return err
+		}
+		worktreePath = filepath.Join(wtDir, branch)
 	}
 
 	res := ImplementResult{
