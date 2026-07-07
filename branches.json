@@ -21,7 +21,7 @@
         },
         {
           "key": "design",
-          "text": "Managed block is a POINTER not a copy of the skill (drift-safe); idempotent write/update/append; uninstall strips it; --no-prompt-block opts out. Logic in cmd/prompt_block.go"
+          "text": "Prompt content lives in .claude/prompts/stackr.md (single source of truth); CLAUDE.md imports it via marker-delimited @.claude/prompts/stackr.md. --local targets cwd's .claude (root pre-run exempts claude --local so it works outside a repo). Content adds sr up/down navigation + stack-sequential-work blurb."
         }
       ]
     },
