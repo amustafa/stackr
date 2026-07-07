@@ -6,6 +6,13 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/7",
       "baseBranch": "main"
+    },
+    "spec-6-sr-implement": {
+      "number": 8,
+      "title": "Spec 6: sr implement — implement a GitHub issue or Jira ticket on a new branch",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/8",
+      "baseBranch": "spec-5-sr-sandbox"
     }
   }
 }
