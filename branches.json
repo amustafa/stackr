@@ -6,7 +6,22 @@
       "parentBranchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
       "branchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
       "children": [],
-      "description": "#1: interactive pr list"
+      "description": "#1: interactive pr list",
+      "context": [
+        {
+          "key": "ticket",
+          "text": "https://github.com/cli/cli/pull/1",
+          "sources": [
+            {
+              "type": "ticket",
+              "reference": "https://github.com/cli/cli/pull/1"
+            }
+          ],
+          "tickets": [
+            "1"
+          ]
+        }
+      ]
     },
     "main": {
       "branchRevision": "d5d270896e628633450629af006d26d560a25072",
