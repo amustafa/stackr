@@ -1,139 +1,120 @@
 ---
 name: stackr
 description: >
-  Stacked branch workflow manager. Use when working with git branches, creating
-  commits, pushing code, or managing PRs. Proactively track design decisions and
-  context with sr context while working on any branch.
+  Stacked-branch workflow for git via the `sr` CLI. Use whenever working with
+  branches, commits, or PRs in a repo that uses stackr — creating and navigating
+  stacked branches, committing with tracked design context, submitting and
+  addressing review on PRs, running work in a disposable sandbox, or implementing
+  a GitHub issue or Jira ticket. Track design decisions with `sr context` as you go.
 ---
 
 # Stackr (sr)
 
-This repo uses stackr for stacked branch management. Use sr commands instead of
-raw git for branch operations.
+This repo uses stackr. Use `sr` for branch operations, not raw git.
 
-## How to Work
+## The one rule
 
-Decompose features into layered branches that build on each other. Each branch
-should be independently reviewable. Build bottom-up: foundational changes first,
-dependent changes stacked on top.
+**Use `sr commit`, not `git commit`; use `sr` for branch/stack moves, not raw
+git.** Stackr keeps a graph of branches and their parents; raw git mutations
+desync it. When in doubt, there is almost always an `sr` verb for what you want —
+check the command map below or run `sr --help`.
 
-When creating a branch, always set an objective:
+## How to work in a stack
 
-    sr create feat-auth-models --desc "User and session types for JWT auth"
+Decompose a change into layered branches that build on each other, each
+independently reviewable. Build bottom-up: foundational changes first, dependent
+changes stacked on top. Give every branch an objective, and record the decisions
+behind it as you go — that context is what turns a pile of commits into a
+reviewable stack (and it writes your PR for you).
 
-Use sr commit (not git commit) to keep the graph in sync:
+## The hot path
 
-    sr commit -a -m "add session model"
+    sr create <name> --desc "objective"     # new branch stacked on current, with an objective
+    sr commit -a -m "message"                # stage + commit, keeping the graph in sync
+    sr modify -a                             # amend current branch and restack descendants
+    sr describe "objective"                  # set/replace the current branch's objective
+    sr sync                                  # fetch trunk, restack, drop merged branches
+    sr submit                                # push and open/update PRs
 
-Track decisions as you go — this is what separates good stacks from chaotic ones.
+`sr create <name> --worktree` makes the branch in a worktree instead of checking
+it out here. Run `sr <cmd> --help` for the full flag set of any command.
 
-## Context Tracking — Do This As You Work
+## Context tracking — do this as you work
 
-Two levels of context exist. Use both proactively.
+Stackr records structured context that feeds `sr info` and PR generation. Two
+levels, both worth using proactively:
 
-**Branch context** — high-level decisions for the whole branch:
+**Branch context** — decisions that hold for the whole branch:
 
     sr context set approach "Stateless JWTs — no DB sessions"
-    sr context set tradeoff "No revocation without blocklist; ok for v1"
-    sr context set design "Split handler into middleware chain" --source file:internal/api/handler.go
+    sr context set design "Split handler into a middleware chain" --source file:internal/api/handler.go
+    sr context set risk "No revocation without a blocklist; acceptable for v1" --ticket PROJ-123
 
-**Commit context** — per-step reasoning (JSON blob):
+**Commit context** — per-step reasoning, attached at commit time as a JSON blob:
 
     sr commit -a -m "add rotation" --context '{"key":"step","text":"Refresh tokens rotate per OWASP","sources":[{"type":"url","reference":"https://..."}]}'
 
-Both feed into PR generation and are visible via sr info.
-Both are lost on squash — persist important context to files first.
+What earns a context entry: the *approach* and *why it beat the alternative*, a
+*trade-off* you accepted, a *plan/issue reference* (`--source file:...`), a
+*follow-up* to revisit. Prune stale ones with `sr context rm <key>`.
 
-### What to Track
+> Context is **lost on squash**. Persist anything that must survive to a file
+> (or the PR body) before squashing a branch.
 
-- Design choice: key "design", "approach", "tradeoff"
-- Plan reference: key "step", with --source file:path/to/plan.md
-- Related files: key "related-files", with --source flag
-- Tickets: use --ticket flag
-- Rationale: key "rationale" — why this approach over alternatives
-- Followup: key "followup" — things to revisit later
+## Recovering from conflicts
 
-Remove stale entries with sr context rm.
+`restack`, `sync`, and `get` replay branches onto their parents and can stop on a
+merge conflict. The operation is *paused*, not failed:
 
-## Core Workflow
+1. Resolve the conflicts in the working tree (edit, then `git add`).
+2. `sr continue` — resumes the paused operation from where it stopped.
 
-    sr create <name> [-m "commit message"] [-a]    # New stacked branch
-    sr create <name> --desc "objective" --worktree  # Create with worktree
-    sr commit -a -m "message"                      # Commit with stackr tracking
-    sr commit -a -m "msg" --context '{"key":"k","text":"t"}'  # Commit with context
-    sr modify [-m "message"] [-a] [-c]             # Amend and restack
-    sr submit [--ai] [-d] [-s] [-f]                # Push to remote
-    sr sync                                        # Fetch trunk, restack, clean merged
-    sr continue                                    # Resume after resolving conflicts
+To bail out instead, `sr abort` returns to the pre-operation state. **Never**
+finish a stackr rebase with raw `git rebase --continue` — always `sr continue`,
+or the graph desyncs.
 
-Use sr commit instead of git commit to track commit context and keep the graph
-in sync. Context entries are JSON blobs with key, text, sources, and tickets.
+## Shipping — the three-mode pattern
 
-## Recovering from Conflicts — Read Before restack/sync/get
+`submit` and `address-review` each work three ways. Pick by situation:
 
-restack, sync, and get replay branches onto their parents and can stop on a
-merge conflict. When that happens the operation is paused, not failed:
+- **Programmatic** (you're already in a session — the default for an agent):
+  `--aiprepare` emits structured JSON to reason over; direct flags act without
+  prompts.
 
-1. Resolve the conflicts in the working tree (edit files, git add).
-2. Run sr continue to resume the paused operation from where it stopped.
+      sr submit --aiprepare                    # PR context as JSON
+      sr submit --title "..." --body-file /tmp/pr.md
+      sr address-review --aiprepare            # all unresolved comments as JSON
 
-Never resolve a stackr rebase with raw git rebase --continue — always use
-sr continue so the stack graph stays in sync.
+- **Interactive**: bare `sr submit` / `sr address-review` runs a wizard.
+- **AI-driven**: `--ai` hands the whole task to a fresh Claude session.
 
-## Submit (3 modes)
+`address-review` walks the stack bottom-to-top; address comments on a branch,
+commit, and it restacks and moves up.
 
-**Programmatic (you're already in a session):**
+## Command map
 
-    sr submit --aiprepare                          # Output PR context as JSON
-    sr submit --title "..." --body "..."           # Create PR directly
-    sr submit --title "..." --body-file /tmp/pr.md # Body from file
+Run `sr <cmd> --help` for flags. Grouped by what you're doing:
 
-**Interactive:** sr submit (wizard: Push only / Create PR)
+- **Start**: `create` · `implement <issue>` · `track` · `checkout`
+- **Make progress**: `commit` · `describe` · `context` · `absorb` (spread staged
+  changes into the right stack commits) · `modify`
+- **Keep the stack healthy**: `restack` · `sync` · `get <branch|PR#>` ·
+  `continue` · `abort`
+- **Navigate**: `up` · `down` · `top` · `bottom` · `trunk` · `checkout`
+- **Inspect**: `log` (`-a` all stacks, `-l` commits) · `info` (`-s` stat, `-d`
+  diff) · `children` · `parent`
+- **Reshape**: `split` · `fold` · `squash` · `move -o <parent>` · `reorder` ·
+  `delete` · `pop` · `revert` · `rename` · `freeze`/`unfreeze`
+- **Ship**: `submit` · `address-review`
+- **Meta**: `init` · `config` · `push-meta`/`pull-meta` · `untrack` · `worktree`
 
-**AI-driven:** sr submit --ai (Claude generates and submits autonomously)
+Global flags worth knowing: `--quiet` (suppress non-essential output, cleaner for
+scripting), `--cwd <dir>` (run as if from another directory), `--no-verify` (skip
+git hooks).
 
-## Review (3 modes)
+## Specialized lanes
 
-Walk the stack bottom-to-top addressing PR review comments.
-
-**Programmatic:**
-
-    sr address-review --aiprepare                          # Output all unresolved comments as JSON
-
-**Interactive:** sr address-review (edit/reply/skip per comment, commit, restack, move up)
-
-**AI-driven:** sr address-review --ai (Claude addresses all comments autonomously)
-
-## Navigation
-
-    sr up [n]            # Move up the stack (away from trunk)
-    sr down [n]          # Move down the stack (toward trunk)
-    sr top               # Jump to top of stack
-    sr bottom            # Jump to bottom of stack
-    sr checkout <branch> # Switch to a tracked branch
-    sr trunk             # Switch to trunk
-
-## Inspection
-
-    sr info [branch]     # Branch details, objective, context, commits
-    sr info -s           # Include diff stat
-    sr info -d           # Include full diff
-    sr log               # Visualize stack tree
-    sr log -a            # Show all stacks
-    sr log -l            # Show commits per branch
-
-## Other Commands
-
-    sr describe "objective"  # Set the current branch's objective
-    sr absorb                # Distribute staged changes into the right stack commits
-    sr get <branch|PR#>      # Sync a branch or PR from remote along its dep path
-    sr rename <new>          # Rename current branch
-    sr delete <branch>       # Delete and reparent children
-    sr move -p <new-parent>  # Reparent a branch
-    sr restack               # Rebase all branches onto their parents
-    sr fold                  # Fold branch into parent
-    sr squash                # Squash commits on current branch
-    sr split                 # Split current branch
-    sr undo                  # Undo last operation
-    sr push-meta             # Push stackr metadata to remote
-    sr pull-meta             # Pull stackr metadata from remote
+- **Running work in a disposable sandbox** (Docker container, skip-permissions) —
+  read `sandbox.md` in this skill directory.
+- **Implementing a GitHub issue or Jira ticket** — read `implement.md` in this
+  skill directory.
