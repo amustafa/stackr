@@ -13,7 +13,13 @@
       "parentBranchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
       "branchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
       "children": [],
-      "description": "sr claude install injects an always-on stackr pointer block into CLAUDE.md (managed, idempotent, reversible, --no-prompt-block opt-out)"
+      "description": "sr claude install injects an always-on stackr pointer block into CLAUDE.md (managed, idempotent, reversible, --no-prompt-block opt-out)",
+      "context": [
+        {
+          "key": "approach",
+          "text": "sr claude install injects a marker-delimited stackr pointer block into CLAUDE.md (always-on), closing the gap where the skill's description might not trigger before an agent reaches for raw git"
+        }
+      ]
     },
     "skill-redesign": {
       "parentBranchName": "spec-6-sr-implement",
