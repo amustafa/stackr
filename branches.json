@@ -11,7 +11,7 @@
     "skill-prompt-block": {
       "parentBranchName": "skill-redesign",
       "parentBranchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
-      "branchRevision": "c11b88f4c186d50b98d36b30cbf7a03d1629b3a2",
+      "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
       "children": [],
       "description": "sr claude install injects an always-on stackr pointer block into CLAUDE.md (managed, idempotent, reversible, --no-prompt-block opt-out)",
       "context": [
