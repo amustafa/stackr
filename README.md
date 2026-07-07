@@ -368,7 +368,7 @@ differences are just bind mounts and the launch command.
 | `sr rename` | Rename a branch |
 | `sr modify` | Amend the current branch and restack descendants |
 | `sr worktree` | Manage git worktrees |
-| `sr claude install` | Install the stackr + sandbox + implement skills for Claude Code |
+| `sr claude install` | Install the stackr skill (with sandbox + implement lanes) for Claude Code |
 | `sr shell-hook` | Print shell integration script |
 | `sr completion` | Generate shell completion scripts |
 
@@ -579,7 +579,7 @@ Stackr ships a skill that teaches Claude how to use `sr` commands. Install it wi
 sr claude install
 ```
 
-This creates `.claude/skills/stackr/SKILL.md` in your repo. Claude then knows the full `sr` command set — branch creation, navigation, context tracking, and PR submission — and will use `sr` via Bash instead of raw git.
+This creates a single unified skill at `.claude/skills/stackr/` — a `SKILL.md` covering the core workflow (branch creation, navigation, context tracking, conflict recovery, PR submission) plus progressive-disclosure lane files (`sandbox.md`, `implement.md`) that Claude reads on demand. Claude then uses `sr` via Bash instead of raw git. Upgrading from an older version folds the separate `sr-sandbox` / `sr-implement` skills into this one automatically.
 
 For programmatic workflows (agents already in a session), use the two-step submit:
 
