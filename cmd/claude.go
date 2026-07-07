@@ -140,9 +140,21 @@ Remove stale entries with sr context rm.
     sr modify [-m "message"] [-a] [-c]             # Amend and restack
     sr submit [--ai] [-d] [-s] [-f]                # Push to remote
     sr sync                                        # Fetch trunk, restack, clean merged
+    sr continue                                    # Resume after resolving conflicts
 
 Use sr commit instead of git commit to track commit context and keep the graph
 in sync. Context entries are JSON blobs with key, text, sources, and tickets.
+
+## Recovering from Conflicts — Read Before restack/sync/get
+
+restack, sync, and get replay branches onto their parents and can stop on a
+merge conflict. When that happens the operation is paused, not failed:
+
+1. Resolve the conflicts in the working tree (edit files, git add).
+2. Run sr continue to resume the paused operation from where it stopped.
+
+Never resolve a stackr rebase with raw git rebase --continue — always use
+sr continue so the stack graph stays in sync.
 
 ## Submit (3 modes)
 
@@ -188,6 +200,9 @@ Walk the stack bottom-to-top addressing PR review comments.
 
 ## Other Commands
 
+    sr describe "objective"  # Set the current branch's objective
+    sr absorb                # Distribute staged changes into the right stack commits
+    sr get <branch|PR#>      # Sync a branch or PR from remote along its dep path
     sr rename <new>          # Rename current branch
     sr delete <branch>       # Delete and reparent children
     sr move -p <new-parent>  # Reparent a branch
