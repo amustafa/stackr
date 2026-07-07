@@ -1,35 +1,11 @@
 {
   "version": 1,
   "branches": {
-    "12-feat-render-a-stack-overview-block-in-each-pr-d": {
-      "parentBranchName": "am/bugfix-submit-ai",
-      "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "children": [],
-      "description": "#12: feat: render a stack overview block in each PR description",
-      "context": [
-        {
-          "key": "ticket",
-          "text": "https://github.com/amustafa/stackr/issues/12",
-          "sources": [
-            {
-              "type": "ticket",
-              "reference": "https://github.com/amustafa/stackr/issues/12"
-            }
-          ],
-          "tickets": [
-            "12"
-          ]
-        }
-      ]
-    },
     "am/bugfix-submit-ai": {
       "parentBranchName": "skill-prompt-block",
       "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
       "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "children": [
-        "12-feat-render-a-stack-overview-block-in-each-pr-d"
-      ]
+      "children": []
     },
     "main": {
       "branchRevision": "d5d270896e628633450629af006d26d560a25072",
