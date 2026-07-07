@@ -136,6 +136,22 @@ _Avoid_: "waiting" (ambiguous — waiting on the agent vs. waiting on the human;
 A proposed PR title/body a **Sandbox** records as a reserved **Branch Context** entry (key `pr`) instead of pushing — it has no credentials. Host-side **Submit** reads the entry and uses it as the PR title/body directly (skipping AI regeneration), offering to edit. Lives in the branch graph (**Shared Metadata**); the sandbox never pushes it, the host does at submit time.
 _Avoid_: draft PR (a GitHub state); a separate file (it is not — it is a **Branch Context** entry).
 
+### Implementing from Issues
+
+**Implement** (`sr implement`):
+Turn an **Issue Reference** into a tracked branch that carries it out. Always creates a *new* branch (never edits in place on an existing one), fetches the issue host-side, seeds a **Prompt** and **Branch Context**, and then either hands off, spawns Claude, or launches a **Sandbox** depending on flags and context.
+_Avoid_: "fix", "resolve" (those describe outcomes, not the command); "generate" (it sets up and optionally drives implementation, it doesn't just emit code).
+
+**Issue Reference**:
+The identifier `sr implement` accepts: a GitHub issue number (`123`, `#123`), a Jira ticket key (`PROJ-456`), or a full issue URL for either. Detected by shape, overridable with `--source`. Fetched host-side via `gh` (GitHub) or the `jira` CLI (Jira). Recorded on the branch as a `ticket` **Branch Context** entry.
+_Avoid_: "ticket" alone (Jira-flavored — GitHub calls them issues), "issue id" (ambiguous with the URL/number forms).
+
+**Prompt** (implement):
+The self-contained brief `sr implement` builds from a fetched issue — a fixed preamble (branch, "commit with sr", "close the issue in your PR") plus the issue title, body, labels, and URL (and comments with `--comments`). It is the single payload that crosses into a **Sandbox**, is fed to a spawned Claude, or is returned as JSON by `--ai`. Deliberately complete so no downstream fetch is needed.
+
+**Hand-off**:
+The default non-`--sandbox` behavior when `sr implement` runs *inside* a Claude session (detected via `CLAUDECODE=1`) or with `--ai`: it scaffolds the branch and returns the **Prompt** (as JSON with `--ai`) for the *calling* agent to implement, rather than spawning a nested Claude. A bare terminal instead spawns `claude` with the **Prompt**.
+
 ## Relationships
 
 - A **Stack** is rooted at a **Trunk** child and extends upward through the full dependency subtree
@@ -156,6 +172,9 @@ _Avoid_: draft PR (a GitHub state); a separate file (it is not — it is a **Bra
 - **Sandbox Status** is published by hooks loaded via a sandbox-only `--settings` file (ADR-0011), so the developer's `~/.claude` is never mutated; `SR_SANDBOX` only tells the hook which sandbox it is
 - **Watch** and the **Prompt Cache** both consume **Sandbox Status**: the Prompt Cache surfaces an ambient awaiting-count; **Watch** surfaces the full dashboard
 - A **Sandbox** runs behind the **Firewall Allowlist** by default; a blocked-domain request surfaces as an awaiting **Sandbox Status**, and adding the domain is the same config-edit-then-relaunch flow as any other added context
+- **Implement** creates a tracked branch off the current branch (like `sr create`), so its branch is a full **Stack** citizen — visible to **Submit**, **Restack**, and `sr log`; the raw-branch shortcut a **Sandbox** uses is deliberately *not* reused here
+- **Implement** fetches its **Issue Reference** host-side (ADR-0013) and bakes the **Prompt**; with `--sandbox` only the **Prompt** crosses into the container, so the **Sandbox**'s no-credentials rule (ADR-0010) is preserved
+- **Implement** records the **Issue Reference** as a `ticket` **Branch Context** entry and sets the branch **Description** to `<ref>: <title>`; the agent is asked to close the issue in its PR, which later becomes a **PR Suggestion**
 
 ## Example dialogue
 
