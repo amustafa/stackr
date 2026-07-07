@@ -35,13 +35,37 @@ func Restack(c *context.Context, opts RestackOpts) error {
 	}
 
 	// Determine which branches to restack.
+	// Each mode must yield branches in an order where a branch's parent is
+	// restacked before the branch itself (parents-first / trunk-first), and
+	// must never include trunk.
 	var toRestack []string
-	if opts.Only {
+	switch {
+	case opts.Only:
+		// Just this branch, nothing else.
 		if !g.IsTrunk(branch) {
 			toRestack = []string{branch}
 		}
-	} else {
-		// Restack upstack from current branch (or its children if on trunk).
+
+	case opts.Downstack:
+		// This branch plus its ancestors toward trunk — nothing upstack.
+		// g.Downstack gives [branch, parent, ..., trunk] (child-first); reverse
+		// it so parents restack before their children, and drop trunk.
+		ds := g.Downstack(branch)
+		for i := len(ds) - 1; i >= 0; i-- {
+			if !g.IsTrunk(ds[i]) {
+				toRestack = append(toRestack, ds[i])
+			}
+		}
+
+	case opts.Upstack:
+		// This branch plus everything upstack (its descendants).
+		toRestack = g.UpstackTopo(branch)
+		if !g.IsTrunk(branch) {
+			toRestack = append([]string{branch}, toRestack...)
+		}
+
+	default:
+		// No scope flag: restack the current branch and everything upstack.
 		toRestack = g.UpstackTopo(branch)
 		if !g.IsTrunk(branch) {
 			toRestack = append([]string{branch}, toRestack...)
@@ -91,6 +115,14 @@ func restackBranches(c *context.Context, branches []string, origBranch string) e
 		// Rebase: --onto <new parent tip> <old parent rev> <branch>
 		err = c.Git.RebaseOnto(b.ParentBranchName, b.ParentBranchRevision, name)
 		if err != nil {
+			// A rebase can fail two ways: it PAUSED on a merge conflict (a
+			// rebase is now in progress and `sr continue` can resume it), or it
+			// never started at all (a precondition fatal — e.g. the branch is
+			// checked out in another worktree). Only the former is resumable, so
+			// only then do we persist recovery state.
+			if !c.Git.IsRebaseInProgress() {
+				return fmt.Errorf("cannot restack %s onto %s: %w", name, b.ParentBranchName, err)
+			}
 			// Conflict — save state for `sr continue`.
 			rs := &store.RebaseState{
 				Operation:     "restack",
