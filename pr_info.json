@@ -1,5 +1,12 @@
 {
   "branches": {
+    "am/bugfix-submit-ai": {
+      "number": 13,
+      "title": "Anchor worktree paths on the main repo root (fix --sandbox crash) and embed AI prompts in --aiprepare",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/13",
+      "baseBranch": "skill-prompt-block"
+    },
     "skill-prompt-block": {
       "number": 10,
       "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
