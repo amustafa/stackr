@@ -304,6 +304,32 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 | `sr abort` | Abort an in-progress operation |
 | `sr revert` | Revert a previous operation |
 
+### Implementing Issues (`sr implement`)
+
+Turn a GitHub issue or Jira ticket into a working branch in one step. `sr
+implement <ref>` fetches the issue host-side, creates a **new tracked branch**
+named `<ref>-<title-slug>`, records the issue linkage, and drives implementation.
+
+| Command | Description |
+|---------|-------------|
+| `sr implement 123` | GitHub issue → new branch; implement here or spawn Claude |
+| `sr implement PROJ-456 --worktree` | Jira ticket in a worktree |
+| `sr implement 123 --sandbox` | implement in a disposable sandbox (implies `--worktree`) |
+| `sr implement 123 --ai` | scaffold the branch and emit `{branch, worktreePath, issueRef, prompt}` as JSON |
+
+**Source detection** is automatic: a number (`123`, `#123`) or GitHub issue URL
+is a GitHub issue; a `KEY-N` (`PROJ-456`) or browse URL is a Jira ticket. Force
+it with `--source github|jira`.
+
+**How it implements** depends on context: inside a Claude session (or with
+`--ai`) it scaffolds and hands the brief back as JSON — no nested agent; a bare
+terminal spawns an interactive Claude on the brief; `--sandbox` runs it in a
+container (attaching in a terminal, detached + JSON when driven by a skill).
+
+Other flags: `--branch <name>` overrides the derived name, `--parent <branch>`
+changes what it stacks on (default: current branch), `--comments` folds the
+issue discussion into the brief. GitHub needs `gh`; Jira needs the `jira` CLI.
+
 ### Sandboxed AI Sessions (`sr sandbox`)
 
 Run Claude with `--dangerously-skip-permissions` **without** exposing your host:
@@ -342,7 +368,7 @@ differences are just bind mounts and the launch command.
 | `sr rename` | Rename a branch |
 | `sr modify` | Amend the current branch and restack descendants |
 | `sr worktree` | Manage git worktrees |
-| `sr claude install` | Install the stackr + sandbox skills for Claude Code |
+| `sr claude install` | Install the stackr + sandbox + implement skills for Claude Code |
 | `sr shell-hook` | Print shell integration script |
 | `sr completion` | Generate shell completion scripts |
 

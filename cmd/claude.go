@@ -41,6 +41,11 @@ var claudeInstallCmd = &cobra.Command{
 			return err
 		}
 		fmt.Printf("Installed sr-sandbox skill to %s\n", filepath.Join(sandboxSkillDir, skillFile))
+
+		if err := installImplementSkill(repoRoot); err != nil {
+			return err
+		}
+		fmt.Printf("Installed sr-implement skill to %s\n", filepath.Join(implementSkillDir, skillFile))
 		return nil
 	},
 }
