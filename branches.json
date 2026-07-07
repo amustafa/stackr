@@ -1,11 +1,20 @@
 {
   "version": 1,
   "branches": {
+    "12-feat-render-a-stack-overview-block-in-each-pr-d": {
+      "parentBranchName": "am/bugfix-submit-ai",
+      "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
+      "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
+      "children": [],
+      "description": "#12: feat: render a stack overview block in each PR description"
+    },
     "am/bugfix-submit-ai": {
       "parentBranchName": "skill-prompt-block",
       "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
       "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "children": [],
+      "children": [
+        "12-feat-render-a-stack-overview-block-in-each-pr-d"
+      ],
       "context": [
         {
           "key": "root-cause",
