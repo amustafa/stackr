@@ -1,6 +1,13 @@
 {
   "version": 1,
   "branches": {
+    "1-interactive-pr-list": {
+      "parentBranchName": "spec-6-sr-implement",
+      "parentBranchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
+      "branchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
+      "children": [],
+      "description": "#1: interactive pr list"
+    },
     "main": {
       "branchRevision": "d5d270896e628633450629af006d26d560a25072",
       "children": [
@@ -21,7 +28,9 @@
       "parentBranchName": "spec-5-sr-sandbox",
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "branchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
-      "children": [],
+      "children": [
+        "1-interactive-pr-list"
+      ],
       "description": "sr implement: issue → tracked branch → implement"
     }
   }
