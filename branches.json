@@ -6,7 +6,22 @@
       "parentBranchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
       "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
       "children": [],
-      "description": "#12: feat: render a stack overview block in each PR description"
+      "description": "#12: feat: render a stack overview block in each PR description",
+      "context": [
+        {
+          "key": "ticket",
+          "text": "https://github.com/amustafa/stackr/issues/12",
+          "sources": [
+            {
+              "type": "ticket",
+              "reference": "https://github.com/amustafa/stackr/issues/12"
+            }
+          ],
+          "tickets": [
+            "12"
+          ]
+        }
+      ]
     },
     "am/bugfix-submit-ai": {
       "parentBranchName": "skill-prompt-block",
