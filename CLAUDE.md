@@ -214,3 +214,7 @@ Agent Farm is configured via `.codev/config.json` at the project root. Created d
 ## For More Info
 
 Read the full protocol documentation in `codev/protocols/`.
+
+<!-- stackr:begin -->
+@.claude/prompts/stackr.md
+<!-- stackr:end -->

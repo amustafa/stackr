@@ -25,8 +25,13 @@ var rootCmd = &cobra.Command{
 	Short:   "stackr — local stacked-branch workflow for git",
 	Version: version.Version,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// init is the only command that doesn't require a repo context.
+		// init doesn't require a repo context.
 		if cmd.Name() == "init" {
+			return nil
+		}
+		// `sr claude install/uninstall --local` targets the current directory's
+		// .claude, so it doesn't need a repo either.
+		if local, _ := cmd.Flags().GetBool("local"); local && cmd.Parent() != nil && cmd.Parent().Name() == "claude" {
 			return nil
 		}
 

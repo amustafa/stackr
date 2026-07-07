@@ -581,6 +581,8 @@ sr claude install
 
 This creates a single unified skill at `.claude/skills/stackr/` — a `SKILL.md` covering the core workflow (branch creation, navigation, context tracking, conflict recovery, PR submission) plus progressive-disclosure lane files (`sandbox.md`, `implement.md`) that Claude reads on demand. Claude then uses `sr` via Bash instead of raw git. Upgrading from an older version folds the separate `sr-sandbox` / `sr-implement` skills into this one automatically.
 
+It also writes an always-on prompt to `.claude/prompts/stackr.md` and imports it from `CLAUDE.md` via a small marker-delimited `@`-reference (`@.claude/prompts/stackr.md`). A skill only loads when its description matches the request, so this always-on prompt guarantees the essentials — prefer `sr` over raw git, stack sequential work, travel the stack with `sr up`/`sr down` — are in context even when the skill didn't trigger. The prompt lives in its own file (one source of truth) while `CLAUDE.md` keeps only a tiny import. It's idempotent, removed by `sr claude uninstall`, and leaves the rest of `CLAUDE.md` untouched. Pass `--no-prompt-block` to skip it, or `--local` to install into the current directory's `.claude` instead of the repo root (works even outside a git repo).
+
 For programmatic workflows (agents already in a session), use the two-step submit:
 
 ```bash
