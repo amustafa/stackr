@@ -18,12 +18,12 @@ type AIPrepareCommit struct {
 
 // AIPrepareResult holds all context an agent needs to craft a PR.
 type AIPrepareResult struct {
+	Prompt      string               `json:"prompt"`
 	Branch      string               `json:"branch"`
 	Parent      string               `json:"parent"`
 	Description string               `json:"description,omitempty"`
 	Context     []graph.BranchContext `json:"context,omitempty"`
 	Commits     []AIPrepareCommit    `json:"commits,omitempty"`
-	DiffStat    string               `json:"diffStat,omitempty"`
 	Diff        string               `json:"diff,omitempty"`
 	ExistingPR  *PRResult            `json:"existingPR,omitempty"`
 	PRTemplate  string               `json:"prTemplate,omitempty"`
@@ -55,9 +55,6 @@ func PrepareAI(c *context.Context) (*AIPrepareResult, error) {
 		Description: b.Description,
 		Context:     b.Context,
 	}
-
-	diffStat, _ := c.Git.DiffStat(b.ParentBranchName, current)
-	result.DiffStat = diffStat
 
 	diffPatch, _ := c.Git.DiffPatch(b.ParentBranchName, current)
 	result.Diff = diffPatch
@@ -107,14 +104,18 @@ func findPRTemplate(c *context.Context) string {
 // spawned by sr submit --ai.
 func BuildAISystemPrompt() string {
 	var b strings.Builder
-	b.WriteString("You are a PR submission assistant for a stacked-branch git workflow.\n\n")
-	b.WriteString("You will receive JSON containing branch info, diff, commits, context entries, and optionally an existing PR.\n\n")
+	b.WriteString("You are a PR submission assistant for stackr, a stacked-branch git workflow.\n\n")
+	b.WriteString("You are given JSON containing this branch's info, diff, commits, context entries, and optionally an existing PR.\n\n")
+	b.WriteString("This branch is ONE branch in a stack. It builds on its parent, and its parent is a separate PR reviewed on its own. ")
+	b.WriteString("Describe only THIS branch's change — do not summarize the whole stack or the parent's work. ")
+	b.WriteString("The `context` entries are design decisions the author recorded with `sr context`; use them to explain the why.\n\n")
 	b.WriteString("Your job:\n")
 	b.WriteString("1. Read the JSON carefully.\n")
 	b.WriteString("2. If an existing PR is present, note its current title and body — you may update or keep them.\n")
 	b.WriteString("3. Generate a concise PR title (no prefix like 'feat:' unless the project uses conventional commits).\n")
 	b.WriteString("4. Generate a PR body in markdown. If a prTemplate is provided, fill it in. Otherwise use:\n")
 	b.WriteString("   ## Summary\n   <what changed and why>\n\n   ## Changes\n   <bulleted list>\n\n   ## Test Plan\n   <how to verify>\n\n")
+	b.WriteString("   Describe the change in prose. Do NOT paste raw diffs or `git --stat` output into the body — keep it focused on what changed and why.\n\n")
 	b.WriteString("5. Run the following command to submit the PR:\n")
 	b.WriteString("   sr submit --title '<title>' --body '<body>'\n\n")
 	b.WriteString("   If the body is long, write it to a temp file and use:\n")

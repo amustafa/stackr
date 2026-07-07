@@ -29,6 +29,7 @@ type BranchReview struct {
 
 // ReviewPrepareResult is the --aiprepare output.
 type ReviewPrepareResult struct {
+	Prompt  string         `json:"prompt"`
 	Stack   []BranchReview `json:"stack"`
 	Summary string         `json:"summary"`
 }
@@ -140,10 +141,14 @@ func ReviewPrepare(c *context.Context) (*ReviewPrepareResult, error) {
 
 // reviewAIPrepare outputs the review context as JSON.
 func reviewAIPrepare(c *context.Context) error {
+	// stdout is a data channel here (JSON), so suppress the "Checking …"
+	// progress prints that ReviewPrepare emits — they would corrupt the JSON.
+	c.Quiet = true
 	result, err := ReviewPrepare(c)
 	if err != nil {
 		return err
 	}
+	result.Prompt = buildReviewAISystemPrompt()
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal review result: %w", err)
@@ -389,8 +394,10 @@ func openEditorAtLine(path string, line int) error {
 
 func buildReviewAISystemPrompt() string {
 	var b strings.Builder
-	b.WriteString("You are a PR review assistant for a stacked-branch git workflow.\n\n")
-	b.WriteString("You will receive JSON via stdin containing unresolved review threads across a stack of PRs.\n\n")
+	b.WriteString("You are a PR review assistant for stackr, a stacked-branch git workflow.\n\n")
+	b.WriteString("You are given JSON containing unresolved review threads across a stack of PRs.\n\n")
+	b.WriteString("Work the stackr way: prefer `sr` over raw git so the stack graph stays in sync, ")
+	b.WriteString("and address branches bottom-to-top so each fix lands before the branches that build on it.\n\n")
 	b.WriteString("Your job:\n")
 	b.WriteString("1. Read all unresolved threads and plan a resolution strategy.\n")
 	b.WriteString("2. Start from the bottom of the stack (first entry in the stack array).\n")
@@ -401,8 +408,8 @@ func buildReviewAISystemPrompt() string {
 	b.WriteString("      gh api repos/OWNER/REPO/pulls/NUMBER/comments -f body='Fixed — ...' -F in_reply_to=COMMENT_ID\n")
 	b.WriteString("   d. Resolve each thread:\n")
 	b.WriteString("      gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=THREAD_ID\n")
-	b.WriteString("   e. Commit: git add <files> && git commit -m 'address review comments'\n")
-	b.WriteString("   f. Restack: sr restack\n")
+	b.WriteString("   e. Commit with stackr: sr commit -m 'address review comments'\n")
+	b.WriteString("   f. Restack dependents: sr restack\n")
 	b.WriteString("   g. If conflicts arise: resolve them, then sr continue\n")
 	b.WriteString("4. Move to the next branch up the stack and repeat.\n")
 	b.WriteString("5. When all threads are resolved, you are done.\n\n")
