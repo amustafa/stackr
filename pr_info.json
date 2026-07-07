@@ -1,5 +1,12 @@
 {
   "branches": {
+    "skill-prompt-block": {
+      "number": 10,
+      "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/10",
+      "baseBranch": "skill-redesign"
+    },
     "skill-redesign": {
       "number": 9,
       "title": "Unify Claude Code skills into one progressive-disclosure skill",
