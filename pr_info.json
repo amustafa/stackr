@@ -7,6 +7,13 @@
       "url": "https://github.com/amustafa/stackr/pull/13",
       "baseBranch": "skill-prompt-block"
     },
+    "am/restack-bugfix": {
+      "number": 14,
+      "title": "fix(restack): honor --downstack/--upstack scope and stop mislabeling worktree collisions",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/14",
+      "baseBranch": "spec-6-sr-implement"
+    },
     "skill-prompt-block": {
       "number": 10,
       "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
