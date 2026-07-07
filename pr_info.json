@@ -1,5 +1,12 @@
 {
   "branches": {
+    "skill-redesign": {
+      "number": 9,
+      "title": "Unify Claude Code skills into one progressive-disclosure skill",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/9",
+      "baseBranch": "spec-6-sr-implement"
+    },
     "spec-5-sr-sandbox": {
       "number": 7,
       "title": "Spec 5: sr sandbox — sandboxed Claude sessions on isolated worktrees",
