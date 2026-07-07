@@ -47,6 +47,12 @@
         }
       ]
     },
+    "am/restack-bugfix": {
+      "parentBranchName": "spec-6-sr-implement",
+      "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
+      "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
+      "children": []
+    },
     "main": {
       "branchRevision": "d5d270896e628633450629af006d26d560a25072",
       "children": [
@@ -124,7 +130,8 @@
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "children": [
-        "skill-redesign"
+        "skill-redesign",
+        "am/restack-bugfix"
       ],
       "description": "sr implement: issue → tracked branch → implement"
     }
