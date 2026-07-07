@@ -36,6 +36,10 @@
         {
           "key": "design",
           "text": "Defer command flags to 'sr --help' (drift-proof); keep only compact command MAP inline so agents can discover commands they'd otherwise never --help"
+        },
+        {
+          "key": "followup",
+          "text": "Consider an ADR for the unified-skill + go:embed-dir + drift-test pattern if it proves durable"
         }
       ]
     },
