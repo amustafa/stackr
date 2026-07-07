@@ -10,6 +10,16 @@
         {
           "key": "root-cause",
           "text": "sr implement --sandbox crashed ('.worktrees/\u003cb\u003e already exists') when run from inside a worktree. Worktree location was computed from 3 places using 2 anchors: WorktreeAdd + implement.go JSON used c.Git.Dir (current checkout); sandbox used mainRoot (parent of git-common-dir). They diverge from any worktree, so scaffold created the worktree at one path and SandboxRun's dirExists guard checked the other, missed it, and re-created -\u003e collision."
+        },
+        {
+          "key": "fix",
+          "text": "Unified all worktree-path computation on the MAIN repo root via a single worktreesRoot(c) helper (sandbox.MainRoot(absGitCommonDir(c))/.worktrees). WorktreeAdd/Remove now pass absolute main-root paths; implement.go reports the same; ensureGitExclude writes to the shared .git/info/exclude. Fixes the crash and makes --sandbox workdir correct from any checkout.",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/worktree.go"
+            }
+          ]
         }
       ]
     },
