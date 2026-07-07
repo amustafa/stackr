@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -53,8 +53,8 @@ Add this to your shell rc file (.bashrc or .zshrc):
 
   eval "$(sr shell-hook)"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Print(shellHookScript)
-		return nil
+		_, err := os.Stdout.WriteString(shellHookScript)
+		return err
 	},
 }
 

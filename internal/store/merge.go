@@ -351,7 +351,20 @@ func mergeConfigs(baseData, localData, remoteData []byte) (*Config, error) {
 		Trunk: mergeString(base.Trunk, local.Trunk, remote.Trunk),
 		// Remote name is clone-local — take local if changed.
 		Remote: mergeStringPreferLocal(base.Remote, local.Remote, remote.Remote),
+		// Sandbox config is merged coarsely (whole-struct, prefer local) — the
+		// point is to not drop it on a metadata merge; field-level 3-way merge
+		// can come later if teams diverge on it.
+		Sandbox: firstNonNilSandbox(local.Sandbox, remote.Sandbox, base.Sandbox),
 	}, nil
+}
+
+func firstNonNilSandbox(cfgs ...*SandboxConfig) *SandboxConfig {
+	for _, c := range cfgs {
+		if c != nil {
+			return c
+		}
+	}
+	return nil
 }
 
 // ---------- PR Info merge ----------

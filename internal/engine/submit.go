@@ -303,15 +303,28 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 		// Already pushed, just save metadata.
 
 	case optCreatePR:
-		title, err := ui.Input("PR title")
+		// Consume a sandbox-deposited PR Suggestion (reserved `pr` context
+		// entry) as editable defaults, if present (ADR-0010).
+		sugTitle, sugBody, hasSug := lookupPRSuggestion(b)
+		if hasSug && !c.Quiet {
+			fmt.Println("Using PR suggestion from branch context (edit as needed).")
+		}
+		prompt := "PR title"
+		if sugTitle != "" {
+			prompt = fmt.Sprintf("PR title [%s]", sugTitle)
+		}
+		title, err := ui.Input(prompt)
 		if err != nil {
 			return err
+		}
+		if title == "" {
+			title = sugTitle
 		}
 		if title == "" {
 			return fmt.Errorf("PR title cannot be empty")
 		}
 
-		body, err := ui.EditText("")
+		body, err := ui.EditText(sugBody)
 		if err != nil {
 			return fmt.Errorf("editor failed: %w", err)
 		}

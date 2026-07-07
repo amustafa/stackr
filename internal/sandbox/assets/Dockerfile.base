@@ -1,0 +1,30 @@
+# Base image for `sr sandbox`. Built once and content-hashed, so it rebuilds
+# only when this file changes. Per-project toolchains go in a repo's
+# .stackr/sandbox/Dockerfile (FROM stackr-sandbox:base), not here.
+#
+# node base gives node+npm for the Claude CLI; iptables/ipset back the egress
+# firewall (ADR-0012). The sr binary is NOT baked in — it is bind-mounted at
+# runtime so the image stays stable and the sandbox always runs the current sr.
+FROM node:20-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git curl ca-certificates gnupg iptables ipset xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI (for host-side flows; the sandbox itself carries no creds).
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# zellij (keeps the Claude session alive across detach/reattach).
+RUN curl -fsSL https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz \
+        | tar -xz -C /usr/local/bin zellij \
+    && chmod +x /usr/local/bin/zellij
+
+# Claude Code CLI.
+RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR /
