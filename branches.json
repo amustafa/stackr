@@ -20,7 +20,7 @@
     "spec-6-sr-implement": {
       "parentBranchName": "spec-5-sr-sandbox",
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
-      "branchRevision": "5e636b957ebbc63c2a1943c6cf33bb241125774e",
+      "branchRevision": "6a6e72583aeb9aa47a811a53fafe56dcf9fbed22",
       "children": [],
       "description": "sr implement: issue → tracked branch → implement"
     }
