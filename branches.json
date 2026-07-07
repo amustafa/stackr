@@ -18,6 +18,10 @@
         {
           "key": "approach",
           "text": "Unified the 3 Claude skills (stackr/sr-sandbox/sr-implement) into ONE skill at .claude/skills/stackr/ with progressive disclosure: SKILL.md + sandbox.md + implement.md"
+        },
+        {
+          "key": "rationale",
+          "text": "Cross-skill refs aren't load-bearing (skills load independently); same-dir progressive disclosure IS reliable. One description routes all 3 intents. Kills 3-way drift + mechanism split."
         }
       ]
     },
