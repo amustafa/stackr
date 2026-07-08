@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"os"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
@@ -91,24 +92,64 @@ func TestRestack_Downstack_ExcludesUpstack(t *testing.T) {
 	}
 }
 
-// Bug #2 (downstream): a rebase that never STARTS (branch checked out in another
-// worktree -> git fatal) must not be reported as a merge conflict, and must not
-// leave a bogus rebase state that `sr continue` would later act on.
-func TestRestack_WorktreeCollision_NoBogusState(t *testing.T) {
+// A branch checked out in another (clean) worktree must be restacked in that
+// worktree rather than failing on git's "already used by worktree" lock, and
+// must never leave a bogus rebase state that `sr continue` would later act on.
+func TestRestack_CleanWorktree_RestacksInPlace(t *testing.T) {
 	c, _ := setupRestackStack(t)
 
-	// Check `a` out in a separate worktree so git refuses to rebase it in place.
+	aBefore, _ := c.Git.RevParse("a")
+
+	// Check `a` out in a separate, clean worktree.
 	wt := t.TempDir() + "/wt-a"
 	if _, err := c.Git.RunGitCapture("worktree", "add", wt, "a"); err != nil {
 		t.Fatalf("worktree add: %v", err)
 	}
 
-	err := Restack(c, RestackOpts{Branch: "b", Downstack: true})
-	if err == nil {
-		t.Fatal("expected an error restacking a branch checked out in another worktree")
+	if err := Restack(c, RestackOpts{Branch: "b", Downstack: true}); err != nil {
+		t.Fatalf("restack should succeed by rebasing `a` in its own worktree: %v", err)
+	}
+
+	aAfter, _ := c.Git.RevParse("a")
+	if aAfter == aBefore {
+		t.Errorf("branch `a` in another worktree was not restacked (tip unchanged %s)", aBefore)
 	}
 
 	if c.Store.HasRebaseState() {
-		t.Error("precondition failure wrote a bogus rebase state; `sr continue` would corrupt the graph")
+		t.Error("clean worktree restack wrote a bogus rebase state; `sr continue` would corrupt the graph")
+	}
+}
+
+// A branch checked out in a DIRTY worktree cannot be cleanly restacked. Under
+// sync's skip-blocked policy it and its descendants are left as-is while the
+// rest of the stack still restacks; no bogus rebase state is written.
+func TestRestack_DirtyWorktree_SkipsLineage(t *testing.T) {
+	c, _ := setupRestackStack(t)
+
+	aBefore, _ := c.Git.RevParse("a")
+	bBefore, _ := c.Git.RevParse("b")
+
+	wt := t.TempDir() + "/wt-a"
+	if _, err := c.Git.RunGitCapture("worktree", "add", wt, "a"); err != nil {
+		t.Fatalf("worktree add: %v", err)
+	}
+	// Dirty the worktree so `a` can't be safely rebased there.
+	if err := os.WriteFile(wt+"/dirty.txt", []byte("uncommitted"), 0o644); err != nil {
+		t.Fatalf("dirty worktree: %v", err)
+	}
+
+	if err := Restack(c, RestackOpts{Branch: "a", Upstack: true, SkipBlocked: true}); err != nil {
+		t.Fatalf("skip-blocked restack should not error: %v", err)
+	}
+
+	// `a` (dirty worktree) and its descendant `b` must be left untouched.
+	if aAfter, _ := c.Git.RevParse("a"); aAfter != aBefore {
+		t.Errorf("dirty-worktree branch `a` was rebased anyway")
+	}
+	if bAfter, _ := c.Git.RevParse("b"); bAfter != bBefore {
+		t.Errorf("descendant `b` of a blocked branch was rebased anyway")
+	}
+	if c.Store.HasRebaseState() {
+		t.Error("skip-blocked restack wrote a rebase state; nothing is resumable here")
 	}
 }
