@@ -119,7 +119,7 @@
     "spec-5-sr-sandbox": {
       "parentBranchName": "main",
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
-      "branchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
+      "branchRevision": "f635558b70b09a54e8a1902d1e9ef15bb439f8e1",
       "children": [
         "spec-6-sr-implement"
       ],
