@@ -144,7 +144,7 @@ func continueRebase(c *context.Context) error {
 	}
 
 	if len(rs.Pending) > 0 {
-		err := restackBranches(c, rs.Pending, rs.OrigBranch)
+		err := restackBranches(c, rs.Pending, rs.OrigBranch, false)
 		if err != nil {
 			return err
 		}

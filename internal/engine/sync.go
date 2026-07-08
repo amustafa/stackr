@@ -72,7 +72,7 @@ func Sync(c *context.Context, opts SyncOpts) error {
 		if !c.Quiet {
 			fmt.Println("Restacking...")
 		}
-		if err := Restack(c, RestackOpts{Branch: trunk}); err != nil {
+		if err := Restack(c, RestackOpts{Branch: trunk, SkipBlocked: true}); err != nil {
 			return err
 		}
 	}
