@@ -14,30 +14,11 @@
       ],
       "isTrunk": true
     },
-    "skill-prompt-block": {
-      "parentBranchName": "skill-redesign",
-      "parentBranchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
-      "branchRevision": "a1d173c1016a0aeaf9596a21f1ac6f537182c0cc",
-      "children": [],
-      "description": "sr claude install injects an always-on stackr pointer block into CLAUDE.md (managed, idempotent, reversible, --no-prompt-block opt-out)",
-      "context": [
-        {
-          "key": "approach",
-          "text": "sr claude install injects a marker-delimited stackr pointer block into CLAUDE.md (always-on), closing the gap where the skill's description might not trigger before an agent reaches for raw git"
-        },
-        {
-          "key": "design",
-          "text": "Prompt content lives in .claude/prompts/stackr.md (single source of truth); CLAUDE.md imports it via marker-delimited @.claude/prompts/stackr.md. --local targets cwd's .claude (root pre-run exempts claude --local so it works outside a repo). Content adds sr up/down navigation + stack-sequential-work blurb."
-        }
-      ]
-    },
     "skill-redesign": {
       "parentBranchName": "spec-6-sr-implement",
       "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "branchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
-      "children": [
-        "skill-prompt-block"
-      ],
+      "children": [],
       "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles",
       "context": [
         {
