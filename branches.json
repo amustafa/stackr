@@ -8,41 +8,6 @@
       ],
       "isTrunk": true
     },
-    "skill-redesign": {
-      "parentBranchName": "spec-6-sr-implement",
-      "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "branchRevision": "5414b40f8c3f2d764c3a4828b3753011a0c0f7ae",
-      "children": [],
-      "description": "Reexamine and possibly unify the Claude Code skills (stackr, sr-sandbox, sr-implement) from first principles",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Unified the 3 Claude skills (stackr/sr-sandbox/sr-implement) into ONE skill at .claude/skills/stackr/ with progressive disclosure: SKILL.md + sandbox.md + implement.md"
-        },
-        {
-          "key": "rationale",
-          "text": "Cross-skill refs aren't load-bearing (skills load independently); same-dir progressive disclosure IS reliable. One description routes all 3 intents. Kills 3-way drift + mechanism split."
-        },
-        {
-          "key": "decision",
-          "text": "Stayed with skill over MCP per ADR-0003 (MCP built+removed; CLI already emits JSON via --aiprepare; ~50 tools = permanent context tax)",
-          "sources": [
-            {
-              "type": "file",
-              "reference": "codev/adr/0003-cli-over-mcp.md"
-            }
-          ]
-        },
-        {
-          "key": "design",
-          "text": "Defer command flags to 'sr --help' (drift-proof); keep only compact command MAP inline so agents can discover commands they'd otherwise never --help"
-        },
-        {
-          "key": "followup",
-          "text": "Consider an ADR for the unified-skill + go:embed-dir + drift-test pattern if it proves durable"
-        }
-      ]
-    },
     "spec-5-sr-sandbox": {
       "parentBranchName": "main",
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
@@ -56,9 +21,7 @@
       "parentBranchName": "spec-5-sr-sandbox",
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "children": [
-        "skill-redesign"
-      ],
+      "children": [],
       "description": "sr implement: issue → tracked branch → implement"
     }
   }
