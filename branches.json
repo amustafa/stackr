@@ -12,17 +12,8 @@
       "parentBranchName": "main",
       "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
       "branchRevision": "bb88e689d7b9246b69f8fad146d5669a7efe9aef",
-      "children": [
-        "spec-6-sr-implement"
-      ],
-      "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
-    },
-    "spec-6-sr-implement": {
-      "parentBranchName": "spec-5-sr-sandbox",
-      "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
-      "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "children": [],
-      "description": "sr implement: issue → tracked branch → implement"
+      "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
     }
   }
 }
