@@ -3,17 +3,8 @@
   "branches": {
     "main": {
       "branchRevision": "d848f5df4b276127c62cce5528f832ba6bb9b1af",
-      "children": [
-        "spec-5-sr-sandbox"
-      ],
-      "isTrunk": true
-    },
-    "spec-5-sr-sandbox": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "de0acdc88b099229e8cbbedcff3c64c0457ece7c",
-      "branchRevision": "bb88e689d7b9246b69f8fad146d5669a7efe9aef",
       "children": [],
-      "description": "Spec 5: sr sandbox — design docs (spec, ADRs, glossary, skill)"
+      "isTrunk": true
     }
   }
 }
