@@ -1,12 +1,6 @@
 {
   "version": 1,
   "branches": {
-    "am/restack-bugfix": {
-      "parentBranchName": "spec-6-sr-implement",
-      "parentBranchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
-      "children": []
-    },
     "main": {
       "branchRevision": "d848f5df4b276127c62cce5528f832ba6bb9b1af",
       "children": [
@@ -63,8 +57,7 @@
       "parentBranchRevision": "0b7c4d76c8dc85168519594eecc2492866bfceab",
       "branchRevision": "85cd5befd845f6bd3ef4bdcf184f190cc2745986",
       "children": [
-        "skill-redesign",
-        "am/restack-bugfix"
+        "skill-redesign"
       ],
       "description": "sr implement: issue → tracked branch → implement"
     }
