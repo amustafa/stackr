@@ -66,38 +66,46 @@ var claudeInstallCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		return installClaude(baseDir, claudeInstallNoPromptBlock)
+	},
+}
 
-		n, err := writeSkill(baseDir)
+// installClaude writes the stackr skill into baseDir/.claude, removes obsolete
+// skill directories, and—unless skipPromptBlock is set—writes the always-on
+// prompt file and the CLAUDE.md import. Each step's outcome is printed. It is
+// the shared implementation behind `sr claude install` and the optional
+// integration offered at the end of `sr init`.
+func installClaude(baseDir string, skipPromptBlock bool) error {
+	n, err := writeSkill(baseDir)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Installed stackr skill (%d files) to %s\n", n, skillDir)
+
+	for _, d := range obsoleteSkillDirs {
+		p := filepath.Join(baseDir, d)
+		if _, err := os.Stat(p); err == nil {
+			if err := os.RemoveAll(p); err != nil {
+				return fmt.Errorf("could not remove obsolete skill %s: %w", d, err)
+			}
+			fmt.Printf("Removed obsolete skill %s (folded into stackr)\n", d)
+		}
+	}
+
+	if !skipPromptBlock {
+		msg, err := writePromptFile(baseDir)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Installed stackr skill (%d files) to %s\n", n, skillDir)
+		fmt.Println(msg)
 
-		for _, d := range obsoleteSkillDirs {
-			p := filepath.Join(baseDir, d)
-			if _, err := os.Stat(p); err == nil {
-				if err := os.RemoveAll(p); err != nil {
-					return fmt.Errorf("could not remove obsolete skill %s: %w", d, err)
-				}
-				fmt.Printf("Removed obsolete skill %s (folded into stackr)\n", d)
-			}
+		msg, err = writeClaudeMdImport(baseDir)
+		if err != nil {
+			return err
 		}
-
-		if !claudeInstallNoPromptBlock {
-			msg, err := writePromptFile(baseDir)
-			if err != nil {
-				return err
-			}
-			fmt.Println(msg)
-
-			msg, err = writeClaudeMdImport(baseDir)
-			if err != nil {
-				return err
-			}
-			fmt.Println(msg)
-		}
-		return nil
-	},
+		fmt.Println(msg)
+	}
+	return nil
 }
 
 var claudeUninstallCmd = &cobra.Command{
