@@ -37,9 +37,59 @@ const promptContent = "# stackr\n" +
 	"\n" +
 	"See the `stackr` skill for the full command set and workflow.\n"
 
+// promptSignature is a distinctive line from promptContent. It lets us detect
+// the guidance even when it was pasted inline rather than imported via the
+// managed block (e.g. copied into a user's global CLAUDE.md).
+const promptSignature = "This repo uses stackr (`sr`)"
+
 // managedBlock is the CLAUDE.md region that imports the prompt file.
 func managedBlock() string {
 	return promptBlockBegin + "\n" + promptImportRef + "\n" + promptBlockEnd
+}
+
+// globalClaudeDir returns the user-level Claude Code config directory, honoring
+// CLAUDE_CONFIG_DIR and otherwise falling back to ~/.claude. Empty if the home
+// directory can't be determined.
+func globalClaudeDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude")
+}
+
+// claudeMdHasStackrPrompt reports whether the CLAUDE.md at path already carries
+// the stackr guidance — via the managed import block, the raw import reference,
+// or the prompt prose pasted inline. A read error (including a missing file)
+// reports false.
+func claudeMdHasStackrPrompt(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, promptBlockBegin) ||
+		strings.Contains(content, promptImportRef) ||
+		strings.Contains(content, promptSignature)
+}
+
+// stackrPromptLocation reports where the stackr Claude prompt is already
+// reachable for a repo rooted at repoRoot: "local" (repoRoot/CLAUDE.md),
+// "global" (the user's Claude config CLAUDE.md), or "" if neither has it.
+// Local takes precedence.
+func stackrPromptLocation(repoRoot string) string {
+	if claudeMdHasStackrPrompt(filepath.Join(repoRoot, claudeMdFile)) {
+		return "local"
+	}
+	if gdir := globalClaudeDir(); gdir != "" {
+		if claudeMdHasStackrPrompt(filepath.Join(gdir, claudeMdFile)) {
+			return "global"
+		}
+	}
+	return ""
 }
 
 // writePromptFile writes the always-on stackr prompt to baseDir/.claude/prompts/stackr.md.

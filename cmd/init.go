@@ -144,7 +144,41 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Initialized stackr with trunk %q\n", trunk)
+
+	maybeOfferClaudeInstall(c)
 	return nil
+}
+
+// maybeOfferClaudeInstall checks whether the stackr Claude Code prompt is
+// already reachable for this repo — in its own CLAUDE.md or the user's global
+// one — and, if not, offers to run the equivalent of `sr claude install`.
+// It is best-effort: any problem here is surfaced but never fails init.
+func maybeOfferClaudeInstall(c *srctx.Context) {
+	repoRoot, err := c.Git.RepoRoot()
+	if err != nil {
+		return
+	}
+
+	switch stackrPromptLocation(repoRoot) {
+	case "local":
+		return // already imported in this repo's CLAUDE.md
+	case "global":
+		fmt.Println("stackr Claude Code prompt found in your global CLAUDE.md — skipping repo install.")
+		return
+	}
+
+	if !flagInteractive {
+		fmt.Println("Tip: run `sr claude install` to teach Claude Code the stackr workflow.")
+		return
+	}
+
+	ok, err := ui.Confirm("Install stackr Claude Code integration (skill + CLAUDE.md prompt)?")
+	if err != nil || !ok {
+		return
+	}
+	if err := installClaude(repoRoot, false); err != nil {
+		fmt.Fprintf(os.Stderr, "claude install failed: %v\n", err)
+	}
 }
 
 func bootstrapRepo(runner *git.Runner, cwd string) error {

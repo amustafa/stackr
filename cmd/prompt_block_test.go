@@ -153,6 +153,93 @@ func TestRemoveOnMissingFilesIsNoop(t *testing.T) {
 	}
 }
 
+func TestClaudeMdHasStackrPrompt(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"managed block", "# x\n" + promptBlockBegin + "\n" + promptImportRef + "\n" + promptBlockEnd + "\n", true},
+		{"import ref only", "# x\n" + promptImportRef + "\n", true},
+		{"inline prose", "# x\n" + promptContent, true},
+		{"signature line", "notes\n" + promptSignature + " somewhere\n", true},
+		{"unrelated", "# My Project\n\nJust some instructions.\n", false},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, claudeMdFile)
+			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := claudeMdHasStackrPrompt(path); got != tc.want {
+				t.Fatalf("claudeMdHasStackrPrompt = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClaudeMdHasStackrPromptMissingFile(t *testing.T) {
+	if claudeMdHasStackrPrompt(filepath.Join(t.TempDir(), "nope.md")) {
+		t.Fatal("missing file should report false")
+	}
+}
+
+func TestStackrPromptLocationLocal(t *testing.T) {
+	// Point the global lookup at an empty dir so only the local file can match.
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	repo := t.TempDir()
+	if _, err := writeClaudeMdImport(repo); err != nil {
+		t.Fatal(err)
+	}
+	if loc := stackrPromptLocation(repo); loc != "local" {
+		t.Fatalf("stackrPromptLocation = %q, want \"local\"", loc)
+	}
+}
+
+func TestStackrPromptLocationGlobal(t *testing.T) {
+	global := t.TempDir()
+	if err := os.WriteFile(filepath.Join(global, claudeMdFile), []byte(promptContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", global)
+	// Repo has no CLAUDE.md, so only the global copy can match.
+	if loc := stackrPromptLocation(t.TempDir()); loc != "global" {
+		t.Fatalf("stackrPromptLocation = %q, want \"global\"", loc)
+	}
+}
+
+func TestStackrPromptLocationLocalTakesPrecedence(t *testing.T) {
+	global := t.TempDir()
+	if err := os.WriteFile(filepath.Join(global, claudeMdFile), []byte(promptContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", global)
+	repo := t.TempDir()
+	if _, err := writeClaudeMdImport(repo); err != nil {
+		t.Fatal(err)
+	}
+	if loc := stackrPromptLocation(repo); loc != "local" {
+		t.Fatalf("stackrPromptLocation = %q, want \"local\" (local should win)", loc)
+	}
+}
+
+func TestStackrPromptLocationNone(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	if loc := stackrPromptLocation(t.TempDir()); loc != "" {
+		t.Fatalf("stackrPromptLocation = %q, want \"\"", loc)
+	}
+}
+
+func TestGlobalClaudeDirHonorsEnv(t *testing.T) {
+	custom := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", custom)
+	if got := globalClaudeDir(); got != custom {
+		t.Fatalf("globalClaudeDir = %q, want %q", got, custom)
+	}
+}
+
 // TestInstalledPromptMatchesConstant guards against the checked-in dogfood copy
 // of the prompt drifting from the source constant — the same discipline as the
 // skill drift guard.

@@ -615,6 +615,13 @@ Stackr ships a skill that teaches Claude how to use `sr` commands. Install it wi
 sr claude install
 ```
 
+`sr init` also offers this automatically: after initializing, it checks whether
+the stackr prompt is already reachable — either in the repo's `CLAUDE.md` or your
+global one (`$CLAUDE_CONFIG_DIR/CLAUDE.md`, default `~/.claude/CLAUDE.md`) — and,
+if not, prompts to run the install for you. Already covered locally, it stays
+silent; covered only globally, it says so and skips. In non-interactive mode it
+prints a one-line hint instead of prompting.
+
 This creates a single unified skill at `.claude/skills/stackr/` — a `SKILL.md` covering the core workflow (branch creation, navigation, context tracking, conflict recovery, PR submission) plus progressive-disclosure lane files (`sandbox.md`, `implement.md`) that Claude reads on demand. Claude then uses `sr` via Bash instead of raw git. Upgrading from an older version folds the separate `sr-sandbox` / `sr-implement` skills into this one automatically.
 
 It also writes an always-on prompt to `.claude/prompts/stackr.md` and imports it from `CLAUDE.md` via a small marker-delimited `@`-reference (`@.claude/prompts/stackr.md`). A skill only loads when its description matches the request, so this always-on prompt guarantees the essentials — prefer `sr` over raw git, stack sequential work, travel the stack with `sr up`/`sr down` — are in context even when the skill didn't trigger. The prompt lives in its own file (one source of truth) while `CLAUDE.md` keeps only a tiny import. It's idempotent, removed by `sr claude uninstall`, and leaves the rest of `CLAUDE.md` untouched. Pass `--no-prompt-block` to skip it, or `--local` to install into the current directory's `.claude` instead of the repo root (works even outside a git repo).
