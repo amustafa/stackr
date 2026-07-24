@@ -41,7 +41,37 @@ make install    # installs `sr` to your $GOPATH/bin
 make build      # outputs to build/sr
 ```
 
+### Zsh Plugin (antidote)
+
+Stackr ships a zsh plugin at the repo root (`stackr.plugin.zsh`), so you can
+install its shell integration through a plugin manager. With
+[antidote](https://antidote.sh), add the repo to your `~/.zsh_plugins.txt`:
+
+```
+amustafa/stackr
+```
+
+Then rebuild your plugin bundle (or restart your shell):
+
+```bash
+antidote update
+```
+
+The plugin sets up both the worktree auto-cd wrapper (`sr shell-hook`) and zsh
+completions (`sr completion zsh`) — but **only if the `sr` binary is on your
+`$PATH`**. If stackr isn't installed yet, loading the plugin is a harmless
+no-op, so the ordering of "install the binary" vs. "load the plugin" doesn't
+matter. Install the binary with `make link`/`make install` (see
+[Development Setup](#development-setup)), and the integration activates on your
+next shell.
+
+The plugin is oh-my-zsh compatible too — clone the repo into
+`$ZSH_CUSTOM/plugins/stackr` and add `stackr` to your `plugins=(...)` list.
+
 ### Shell Completions
+
+If you'd rather wire things up manually (or aren't on zsh), generate
+completions directly:
 
 ```bash
 # Bash
@@ -52,6 +82,12 @@ sr completion zsh > "${fpath[1]}/_sr"
 
 # Fish
 sr completion fish > ~/.config/fish/completions/sr.fish
+```
+
+And the worktree auto-cd wrapper (add to your `.zshrc`/`.bashrc`):
+
+```bash
+eval "$(sr shell-hook)"
 ```
 
 ## Quick Start
