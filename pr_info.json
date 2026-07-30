@@ -14,6 +14,13 @@
       "url": "https://github.com/amustafa/stackr/pull/14",
       "baseBranch": "spec-6-sr-implement"
     },
+    "am/restack-sync-bugfix": {
+      "number": 21,
+      "title": "Fix stale-base corruption in squash, restack, and sync",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/21",
+      "baseBranch": "main"
+    },
     "skill-prompt-block": {
       "number": 10,
       "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
