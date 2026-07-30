@@ -591,6 +591,33 @@ sr continue
 sr abort
 ```
 
+### Repairing a Lost Base Commit
+
+Every tracked branch records the commit it was branched from — its **base**. The
+range `(base, branch]` is what stackr replays when restacking, so the base is
+what keeps a rebase from picking up commits that belong to the parent.
+
+Stackr keeps bases alive behind `refs/stackr/bases` and repairs them
+automatically where it safely can, including recovering one from the parent's
+reflog. If a base is lost beyond recovery — usually after heavy raw-git surgery
+plus an expired reflog — stackr stops rather than guess, because guessing
+duplicates or drops commits:
+
+```
+cannot determine which commits belong to feat-3: recorded base 0000000 is
+missing or is not an ancestor of the branch.
+```
+
+Point it at the commit the branch was created from:
+
+```bash
+# See where the branch actually diverged
+git log --oneline <parent>..<branch>
+
+# Re-point the base and restack in one step
+sr restack --branch feat-3 --base <sha>
+```
+
 ### Reorganizing a Stack
 
 ```bash

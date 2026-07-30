@@ -20,6 +20,11 @@ type RestackOpts struct {
 	// conflicts). The blocked branch and everything stacked on top of it are
 	// left as-is instead of halting the whole operation. Used by `sr sync`.
 	SkipBlocked bool
+
+	// Base explicitly re-points the target branch's base commit before
+	// restacking. This is the escape hatch for a branch whose base was lost or
+	// corrupted beyond automatic recovery — see BaseUnresolvedError.
+	Base string
 }
 
 // Restack rebases branches so they're correctly stacked on their parents.
@@ -39,6 +44,16 @@ func Restack(c *context.Context, opts RestackOpts) error {
 
 	if !g.Has(branch) {
 		return fmt.Errorf("branch %q not tracked", branch)
+	}
+
+	// An explicit --base repairs the recorded pointer before anything reads it.
+	if opts.Base != "" {
+		if err := setBase(c, g, branch, opts.Base); err != nil {
+			return err
+		}
+		if err := c.Store.WriteGraph(g); err != nil {
+			return err
+		}
 	}
 
 	// Determine which branches to restack.
@@ -140,9 +155,34 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 			return fmt.Errorf("cannot resolve parent %s: %w", b.ParentBranchName, err)
 		}
 
-		// If the parent hasn't moved, there's nothing to rebase.
-		if parentRev == b.ParentBranchRevision {
+		// Is the branch already built on the parent's current tip? Ask git
+		// rather than comparing recorded revisions — the graph can be stale or
+		// wrong, git's ancestry cannot. This also self-heals the recorded base:
+		// if parentRev is an ancestor of the branch then, by definition, the
+		// branch's own commits are exactly (parentRev, name].
+		if isStackedOn(c, name, parentRev) {
+			b.ParentBranchRevision = parentRev
+			if newRev, rerr := c.Git.RevParse(name); rerr == nil {
+				b.BranchRevision = newRev
+			}
 			continue
+		}
+
+		// Determine which commits actually belong to this branch before moving
+		// anything. Getting this wrong is what replays a parent's superseded
+		// commits on top of its rewritten ones.
+		base, err := resolveBase(c, name, b)
+		if err != nil {
+			if skipBlocked {
+				blocked[name] = true
+				skipped = append(skipped, skippedBranch{name, "base commit could not be determined"})
+				continue
+			}
+			return err
+		}
+		if base.Recovered() && !c.Quiet {
+			fmt.Printf("Note: recorded base for %s was unusable; recovered %s from %s's reflog\n",
+				name, abbrev(base.SHA), b.ParentBranchName)
 		}
 
 		if !c.Quiet {
@@ -171,7 +211,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 				return fmt.Errorf("cannot restack %s: %s", name, reason)
 			}
 
-			if err := runner.RebaseOnto(b.ParentBranchName, b.ParentBranchRevision, name); err != nil {
+			if err := runner.RebaseOnto(b.ParentBranchName, base.SHA, name); err != nil {
 				// A conflict in another worktree can't be resumed via
 				// `sr continue` (rebase state lives in the shared git dir but
 				// the rebase is in that worktree), so abort to leave it clean.
@@ -186,7 +226,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 			}
 		} else {
 			// Rebase: --onto <new parent tip> <old parent rev> <branch>
-			if err := c.Git.RebaseOnto(b.ParentBranchName, b.ParentBranchRevision, name); err != nil {
+			if err := c.Git.RebaseOnto(b.ParentBranchName, base.SHA, name); err != nil {
 				// A rebase can fail two ways: it PAUSED on a merge conflict (a
 				// rebase is now in progress and `sr continue` can resume it), or
 				// it never started at all (a precondition fatal). Only the

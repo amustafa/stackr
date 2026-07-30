@@ -36,8 +36,27 @@ func Squash(c *context.Context, opts SquashOpts) error {
 		return fmt.Errorf("branch %q not tracked", current)
 	}
 
-	// Soft reset to parent, then recommit.
-	if err := c.Git.RunGit("reset", "--soft", b.ParentBranchName); err != nil {
+	// Soft reset to this branch's BASE, then recommit.
+	//
+	// Resetting to the parent branch *name* is wrong whenever the parent has
+	// moved since this branch was last restacked: the parent's tip is then not
+	// an ancestor of HEAD, so `reset --soft` leaves the index holding the old
+	// tree while HEAD jumps to the new parent. The commit that follows has a
+	// diff of old-branch-tree against new-parent-tree — which silently REVERTS
+	// the parent's newer work inside the squashed commit.
+	//
+	// The recorded base is an ancestor of HEAD by construction, so the squashed
+	// commit contains exactly this branch's own work and nothing else.
+	base, err := resolveBase(c, current, b)
+	if err != nil {
+		return err
+	}
+	if base.Recovered() && !c.Quiet {
+		fmt.Printf("Note: recorded base for %s was unusable; recovered %s from %s's reflog\n",
+			current, abbrev(base.SHA), b.ParentBranchName)
+	}
+
+	if err := c.Git.RunGit("reset", "--soft", base.SHA); err != nil {
 		return fmt.Errorf("reset failed: %w", err)
 	}
 
@@ -61,6 +80,9 @@ func Squash(c *context.Context, opts SquashOpts) error {
 		return err
 	}
 	b.BranchRevision = newRev
+	// HEAD is now base.SHA plus exactly one commit, so the base is unchanged in
+	// meaning — but persist it in case it was recovered rather than recorded.
+	b.ParentBranchRevision = base.SHA
 
 	// Merge all commit contexts into the squashed commit.
 	if len(b.CommitContexts) > 0 {

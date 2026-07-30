@@ -18,6 +18,7 @@ var restackCmd = &cobra.Command{
 			Downstack: restackFlagDown,
 			Upstack:   restackFlagUp,
 			Only:      restackFlagOnly,
+			Base:      restackFlagBase,
 		})
 	},
 }
@@ -27,6 +28,7 @@ var (
 	restackFlagDown   bool
 	restackFlagUp     bool
 	restackFlagOnly   bool
+	restackFlagBase   string
 )
 
 func init() {
@@ -34,5 +36,6 @@ func init() {
 	restackCmd.Flags().BoolVarP(&restackFlagDown, "downstack", "d", false, "restack downstack only")
 	restackCmd.Flags().BoolVarP(&restackFlagUp, "upstack", "u", false, "restack upstack only")
 	restackCmd.Flags().BoolVarP(&restackFlagOnly, "only", "o", false, "restack only this branch")
+	restackCmd.Flags().StringVar(&restackFlagBase, "base", "", "re-point the branch's base commit (repairs a lost or corrupted base)")
 	rootCmd.AddCommand(restackCmd)
 }

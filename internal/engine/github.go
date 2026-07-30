@@ -71,6 +71,54 @@ func ghPRForBranch(branch string) (*PRResult, error) {
 	return &result, nil
 }
 
+// ghMergedHeadBranches returns the set of head-branch names whose PRs are
+// merged, in a single batched query.
+//
+// This is the only reliable way to detect a squash-merged or rebase-merged
+// branch: those strategies rewrite the commits when landing them, so no local
+// ancestry test will ever recognize them as merged.
+//
+// Best-effort by design. Without gh, offline, or outside a GitHub remote this
+// returns an empty set and callers fall back to local heuristics — sync must
+// still work with no network.
+func ghMergedHeadBranches() map[string]bool {
+	merged := map[string]bool{}
+
+	if err := ghCheckInstalled(); err != nil {
+		return merged
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
+		"--state", "merged",
+		"--limit", "200",
+		"--json", "headRefName")
+	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1")
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = nil
+
+	if err := cmd.Run(); err != nil {
+		return merged
+	}
+
+	var prs []struct {
+		HeadRefName string `json:"headRefName"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &prs); err != nil {
+		return merged
+	}
+	for _, pr := range prs {
+		if pr.HeadRefName != "" {
+			merged[pr.HeadRefName] = true
+		}
+	}
+	return merged
+}
+
 // ghCreatePR creates a new PR via gh and returns the result.
 func ghCreatePR(opts GHCreateOpts) (*PRResult, error) {
 	args := []string{"pr", "create",
