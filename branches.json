@@ -1,17 +1,9 @@
 {
   "version": 1,
   "branches": {
-    "am/restack-sync-bugfix": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "212517401d825bf1541fc463a295790360892962",
-      "branchRevision": "212517401d825bf1541fc463a295790360892962",
-      "children": []
-    },
     "main": {
-      "branchRevision": "d848f5df4b276127c62cce5528f832ba6bb9b1af",
-      "children": [
-        "am/restack-sync-bugfix"
-      ],
+      "branchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
+      "children": [],
       "isTrunk": true
     }
   }
