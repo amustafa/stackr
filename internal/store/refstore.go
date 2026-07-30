@@ -14,6 +14,10 @@ import (
 
 const stackrRef = "refs/stackr/data"
 
+// baseAnchorRef holds a synthetic commit whose parents are every base commit
+// recorded in the graph, keeping them safe from garbage collection.
+const baseAnchorRef = "refs/stackr/bases"
+
 // RefStore manages stackr metadata stored as git objects behind a custom ref.
 // Shared data (graph, config, PR info) lives in the commit chain at refs/stackr/data.
 // Local-only data (rebase state, undo) remains on the filesystem.
@@ -85,7 +89,31 @@ func (rs *RefStore) WriteGraph(g *graph.Graph) error {
 		return &srerr.StoreError{Op: "marshal", Path: "branches.json", Err: err}
 	}
 	data = append(data, '\n')
-	return rs.writeFiles(map[string][]byte{"branches.json": data}, "update graph")
+	if err := rs.writeFiles(map[string][]byte{"branches.json": data}, "update graph"); err != nil {
+		return err
+	}
+	rs.anchorBases(g)
+	return nil
+}
+
+// anchorBases keeps every recorded base commit reachable from a git ref.
+//
+// A branch's base is normally reachable from its parent — until the parent is
+// amended or rebased, at which point the old parent tip is referenced only by
+// the graph, which git knows nothing about. Anchoring it prevents `git gc` from
+// collecting the one commit that restack needs to compute the branch's commit
+// range.
+//
+// Best-effort: failing to anchor costs durability, not correctness, and must
+// never fail the graph write that just succeeded.
+func (rs *RefStore) anchorBases(g *graph.Graph) {
+	shas := make([]string, 0, len(g.Branches))
+	for _, b := range g.Branches {
+		if b.ParentBranchRevision != "" {
+			shas = append(shas, b.ParentBranchRevision)
+		}
+	}
+	_ = rs.git.AnchorCommits(baseAnchorRef, "stackr: base commit anchor", shas)
 }
 
 func (rs *RefStore) ReadConfig() (*Config, error) {
