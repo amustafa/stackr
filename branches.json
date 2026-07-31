@@ -5,6 +5,14 @@
       "parentBranchName": "main",
       "parentBranchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
       "branchRevision": "c009e146d0a87b7df938353fc726215ac1f54c4a",
+      "children": [
+        "gh-stacks-display"
+      ]
+    },
+    "gh-stacks-display": {
+      "parentBranchName": "gh-stacks-api",
+      "parentBranchRevision": "c009e146d0a87b7df938353fc726215ac1f54c4a",
+      "branchRevision": "c009e146d0a87b7df938353fc726215ac1f54c4a",
       "children": []
     },
     "main": {
