@@ -10,13 +10,18 @@ Answer it primarily from a **Push Record**: the SHA *this clone* last left on th
 
 The Push Record is **local-only**, stored beside rebase/undo state rather than in the shared metadata at `refs/stackr/data`. Its meaning is "*we* put that there", so a record travelling between clones would let one developer's push authorise another developer's force push over it — converting the only sound check into the most dangerous one.
 
-Fallback tiers, in order, each failing conservative (any unexpected exit, unrelated histories, or missing merge base prompts):
+The Push Record has **three** outcomes, and the difference between the last two is load-bearing:
 
-1. **Push Record matches** — provably ours, force.
-2. **Whole-branch containment** — `git merge-tree --write-tree B origin/B`; if the merged tree equals local's tree, the remote contributes nothing.
-3. **Per-commit replay** — for each remote commit with no patch-equivalent locally, replay it alone onto local; a no-op means it is already contained.
+- **Matches** — provably ours, force.
+- **Differs** — somebody else wrote. Stop. The content tiers may not clear this.
+- **Absent** — this clone has never pushed the branch and has no claim either way; fall through to the heuristics.
 
-A "review" affordance may explain a Push Record mismatch but may never clear it back to safe.
+Fallback tiers, reached only when the record is absent, each failing conservative (any unexpected exit, unrelated histories, or missing merge base prompts):
+
+1. **Whole-branch containment** — `git merge-tree --write-tree B origin/B`; if the merged tree equals local's tree, the remote contributes nothing.
+2. **Per-commit replay** — for each remote commit with no patch-equivalent locally, replay it alone onto local; a no-op means it is already contained.
+
+Why a mismatch is not clearable: if a collaborator force-pushes with a commit **removed** while our branch is independently restacked, their deletion falls outside the merge base entirely. The merge becomes a no-op, every content test reports "nothing to lose", and force-pushing resurrects exactly what they deleted. Absence of evidence is not evidence of absence — and a deletion leaves no evidence at all.
 
 ## Alternatives considered
 

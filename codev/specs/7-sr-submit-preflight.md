@@ -59,7 +59,10 @@ if remote == local               -> NoPush
 if remote is ancestor of local   -> PushPlain      (plain fast-forward)
 if local is ancestor of remote   -> Prompt("behind")
 --- refs diverged ---
-if PushRecord[remote/B] == remoteSHA -> PushForce(remoteSHA)          # Tier 0, SOUND
+Tier 0 (SOUND), three outcomes:
+    PushRecord == remoteSHA          -> PushForce(remoteSHA)     # provably ours
+    PushRecord present but different -> Prompt("somebody else pushed")
+    PushRecord absent                -> fall through to tiers 1-2
 if no merge base                     -> Prompt("unrelated histories")
 Tier 1: merge-tree --write-tree B remote/B
         nonzero exit                 -> Prompt("conflict")
@@ -74,7 +77,7 @@ Tier 2: for each X in rev-list --right-only --cherry-pick B...remote/B    (merge
 
 **Tier 0 is the only sound tier.** Content analysis is structurally blind to deletions: if a collaborator drops a commit and force-pushes, the remote becomes a strict *ancestor* of local, every content test says "safe", and git does not even require a force — the dropped commit is silently resurrected. Only "the remote moved off the SHA we left there" catches it.
 
-Tiers 1–2 exist because a tier-0 miss is not evidence of conflict — GitHub itself writes to PR branches. A tier-0 failure therefore still runs 1–2. **Nothing may clear a tier-0 failure back to safe.**
+Tier 0's three outcomes matter, and conflating the last two is a real bug. **Absent** means this clone has never pushed the branch and has no claim either way — the heuristics are all we have, and they are good enough for the fresh-clone and new-machine cases. **Mismatch** means somebody else wrote, and the content tiers **cannot** clear it: if their write dropped a commit while our branch was independently restacked, their deletion falls outside the merge base entirely, so the merge is a no-op, every content test reports "nothing to lose", and force-pushing resurrects exactly what they removed. Absence of evidence is not evidence of absence.
 
 `--no-merges` is deliberately **absent** from tier 2: a merge commit can carry content (an "evil merge" resolution). Merge commits are replayed against their first parent (`X^1`).
 
