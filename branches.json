@@ -27,7 +27,7 @@
     "submit-preflight": {
       "parentBranchName": "gh-stacks-display",
       "parentBranchRevision": "06c0b1f9ce35c9887b83643329dd419aca5b54b3",
-      "branchRevision": "16bba6557da1fad15cccc60adcc9e9cda7208e83",
+      "branchRevision": "4b4be979990e938ee26a477369915b227ce5be4d",
       "children": [],
       "description": "sr submit preflight: settle content divergence before pushing"
     }
