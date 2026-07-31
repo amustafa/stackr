@@ -3,16 +3,16 @@
   "branches": {
     "gh-stacks-api": {
       "parentBranchName": "main",
-      "parentBranchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
-      "branchRevision": "7f5f5b7a23b87ee726c592f0e8d21576edd96be1",
+      "parentBranchRevision": "5461d86cced5152ba71fd8a6fb1c3735fa3f2a1e",
+      "branchRevision": "d77d8d8509414f24988176d47c26c6e37a58bc23",
       "children": [
         "gh-stacks-display"
       ]
     },
     "gh-stacks-display": {
       "parentBranchName": "gh-stacks-api",
-      "parentBranchRevision": "7f5f5b7a23b87ee726c592f0e8d21576edd96be1",
-      "branchRevision": "201e50abb9a5b094b80d9efa5d05690e34bad09f",
+      "parentBranchRevision": "d77d8d8509414f24988176d47c26c6e37a58bc23",
+      "branchRevision": "6eee75e5e5bda2cd74a5d29875d71593438e753b",
       "children": []
     },
     "main": {
