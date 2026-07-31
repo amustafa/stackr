@@ -301,15 +301,47 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 ```
 -d, --draft           Mark PRs as draft
 -s, --stack           Push all branches in the stack
--u, --update-only     Only update already-pushed branches
--f, --force           Force push
-    --dry-run         Show what would be pushed without doing it
+-u, --update-only     Only submit branches that already have a PR or remote branch
+-f, --force           Overwrite the remote when it has content you don't, without
+                      prompting (the push is still lease-pinned)
+    --no-force        Never force-push; fail instead
+    --dry-run         Show what would be pushed, changing nothing
     --title           PR title (skips interactive prompts)
     --body            PR body (used with --title)
     --body-file       Read PR body from file (used with --title)
     --ai              Launch Claude to generate and submit PR
     --aiprepare       Output PR context as JSON (for agents)
 ```
+
+**Force pushing is automatic — and safe.** Restacking rewrites SHAs, so pushing a
+stacked branch nearly always needs a force push. Rather than making you decide
+whether `-f` is safe today, `sr submit` works it out per branch:
+
+1. If the remote still holds the commit stackr itself last pushed there,
+   everything on it is yours and the force push is lossless. No prompt.
+2. Otherwise stackr compares content: a restack, squash, absorb, split or
+   reorder contributes nothing new to the remote and still pushes silently.
+3. Only if the remote genuinely holds changes you don't have does it stop and
+   ask — with the option to merge them in (squashed or cherry-picked), take
+   theirs, or overwrite.
+
+This all happens in a **preflight** that runs across every branch being
+submitted *before anything is pushed*, so you settle the whole stack in one go
+rather than discovering a conflict halfway through publishing it. Every force
+push pins its lease to the exact commit that was inspected, so if the remote
+moves while you're resolving, the push is rejected rather than overwriting it.
+
+If preflight changed branches locally and you want them back, it prints a
+rollback id:
+
+```
+sr rollback              # undo the most recent submit's local changes
+sr rollback --list       # see what's available
+sr rollback 20260731-143022
+```
+
+(`sr rollback` restores *branch tips*. `sr undo` restores the *branch graph* —
+who depends on whom — and can't put back a reset or a cherry-pick.)
 
 **Three submit modes:**
 
@@ -335,7 +367,8 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 
 | Command | Description |
 |---------|-------------|
-| `sr undo` | Undo the last stack mutation |
+| `sr undo` | Undo the last stack mutation (the branch graph) |
+| `sr rollback [id]` | Restore branch tips recorded before a submit changed them |
 | `sr continue` | Continue after resolving a rebase conflict |
 | `sr abort` | Abort an in-progress operation |
 | `sr revert` | Revert a previous operation |

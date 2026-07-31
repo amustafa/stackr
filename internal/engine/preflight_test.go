@@ -402,3 +402,64 @@ func TestPushPhase_RecordsWhatItPushed(t *testing.T) {
 		}
 	}
 }
+
+// The rollback token exists because sr undo restores the graph only (ADR-0002)
+// and cannot put back a reset or a cherry-pick. Preflight prints its id, so the
+// id has to actually resolve to something that restores the branch tips.
+func TestRollback_RestoresBranchTipsRecordedBeforeRemediation(t *testing.T) {
+	e := setupPreflightStack(t)
+
+	before := map[string]string{}
+	for _, name := range []string{"a", "b", "c"} {
+		before[name], _ = e.ctx.Git.RevParse(name)
+	}
+
+	id, err := writeRollbackToken(e.ctx, []string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("writeRollbackToken: %v", err)
+	}
+
+	// Rewrite the stack the way "Overwrite local" would.
+	e.git(e.ctx.Git, "checkout", "b")
+	e.commit(e.ctx.Git, "wrecked.txt", "oops\n", "a change we want to undo")
+	after, _ := e.ctx.Git.RevParse("b")
+	if after == before["b"] {
+		t.Fatal("test setup did not actually move b")
+	}
+
+	if err := Rollback(e.ctx, RollbackOpts{ID: id}); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	for _, name := range []string{"a", "b", "c"} {
+		got, _ := e.ctx.Git.RevParse(name)
+		if got != before[name] {
+			t.Errorf("%s = %s, want the recorded tip %s", name, abbrev(got), abbrev(before[name]))
+		}
+	}
+
+	// The graph must follow the refs, or the next restack works from revisions
+	// that no longer exist.
+	g, _ := e.ctx.Store.ReadGraph()
+	if rev := g.Branches["b"].BranchRevision; rev != before["b"] {
+		t.Errorf("graph records %s for b, want %s", abbrev(rev), abbrev(before["b"]))
+	}
+}
+
+func TestRollback_UnknownIDIsAClearError(t *testing.T) {
+	e := setupPreflightStack(t)
+	err := Rollback(e.ctx, RollbackOpts{ID: "nope"})
+	if err == nil {
+		t.Fatal("an unknown rollback id must error")
+	}
+}
+
+func TestRollback_DefaultsToTheMostRecentToken(t *testing.T) {
+	e := setupPreflightStack(t)
+	if _, err := writeRollbackToken(e.ctx, []string{"a"}); err != nil {
+		t.Fatalf("writeRollbackToken: %v", err)
+	}
+	if err := Rollback(e.ctx, RollbackOpts{}); err != nil {
+		t.Fatalf("Rollback with no id should use the latest token: %v", err)
+	}
+}
