@@ -167,6 +167,9 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 		}
 
 		_ = c.Git.DeleteBranch(name, true)
+		// A recreated branch of the same name must start with no claim on the
+		// remote (ADR-0014).
+		_ = c.Store.DeletePushRecordsForBranch(name)
 		cleaned = append(cleaned, name)
 	}
 	return cleaned

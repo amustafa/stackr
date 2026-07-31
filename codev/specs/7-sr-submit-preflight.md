@@ -22,7 +22,7 @@ We want `sr submit` to decide, per branch, whether a force push would lose anyth
 - `sr submit` runs a **Preflight** that fetches, classifies every branch in the push set, resolves **Content Divergence** with the user, and restacks after any local change — **publishing nothing**.
 - Only once the whole push set is settled does anything get pushed, bottom-up, with a lease **pinned to the SHA that was actually inspected**.
 - The common case — a restacked stack that nobody else touched — is silent and needs no `-f`.
-- **Frozen** means what the glossary says: a wall (ADR-0015).
+- **Frozen** means what the glossary says, per operation (ADR-0015): restack stops at it, submit steps over it.
 - Force-push safety comes from a **Push Record**, not from inspecting content (ADR-0014).
 
 ## Stakeholders
@@ -34,7 +34,7 @@ We want `sr submit` to decide, per branch, whether a force push would lose anyth
 ## Constraints
 
 - Per **ADR-0014**: the Push Record is the primary check and is **local-only**; content inspection is a fallback. A shared record would let one developer's push authorise another's force push over it.
-- Per **ADR-0015**: Frozen is a wall — never rebased, never pushed, entire upstack excluded from both.
+- Per **ADR-0015**: Frozen is operation-dependent — never rebased and never pushed by an automatic operation, a **wall** for Restack (dependents are not rebased) and a **hole** for Submit (dependents are still pushed). Naming a frozen branch explicitly is not blocked.
 - Per **ADR-0002**: `sr undo` restores the graph only. The rollback token introduced here is a **separate, local** artifact; extending undo to restore refs is explicitly out of scope (deferred to a `sr checkpoint` / `sr rollback` spec).
 - Per **ADR-0003**: GitHub is reached by shelling to `gh`; no REST client.
 - The local graph remains the source of truth (`restack.go:160`), which is what settles the diverged-GitHub-stack policy.
@@ -94,7 +94,7 @@ Publishes nothing. Order is bottom-up so a branch is classified in its final sha
      | **Overwrite local** | reset to `<remote>/B`, discarding our commits on this branch |
      | **Overwrite remote** | push ours anyway; their commits are lost |
 
-   - if local changed, restack the branch **and its full upstack immediately** — including branches outside the push set — then reload the graph.
+   - if local changed, restack the branch **and its full upstack immediately** — including branches outside the push set — then reload the graph. The restack stops at any frozen branch (ADR-0015), leaving that lineage unrebased.
    - if a restack is blocked (dirty worktree, conflict), prompt **Stop | Skip**; Skip drops that branch **and its entire lineage** from the push set.
 3. A conflict during either merge remediation is `--abort`ed and degrades into **Stop** — no conflict-resumption machinery is needed.
 4. On Stop: nothing is pushed, remediations already made are **kept**, and the rollback id is printed. Re-running `sr submit` is idempotent because classification is re-derived, never remembered.
@@ -142,7 +142,7 @@ Pre-existing defects that this flow would otherwise inherit:
 - `mergeBranchPR` becomes **field-level** so concurrent clones stop dropping each other's `BaseBranch` / `StackNumber`.
 - `resolveDivergedStack` implemented; signature widened to take `baseByPR`, `prInfo` and interactivity so it can clear `StackNumber` and retarget bases.
 - `--update-only` implemented.
-- Frozen honoured in `restack.go` (ADR-0015), which also changes `sr restack` and `sr sync`.
+- Frozen honoured in `restack.go` as a **wall** (ADR-0015), which also changes `sr restack` and `sr sync`. Submit keeps treating it as a **hole**, with one addition: a frozen branch that was never pushed leaves its dependent's PR base pointing at a ref that does not exist, so submit reports that against the frozen branch instead of letting GitHub reject the dependent.
 
 ### Stale-state rule
 
@@ -160,7 +160,9 @@ Rule: preflight owns one graph and **reloads `g` and `prInfo` after every restac
 - [ ] An unqualified `--force-with-lease` no longer appears in any submit path; every force push pins the inspected SHA.
 - [ ] A push rejected by a stale lease stops the run and reports exactly what was and wasn't pushed.
 - [ ] Stopping mid-preflight publishes nothing, keeps prior remediations, and prints a rollback id; re-running submit resumes cleanly.
-- [ ] A frozen mid-stack branch is neither rebased nor pushed, its upstack is excluded from both, and the exclusion is named in the output.
+- [ ] A frozen mid-stack branch is neither rebased nor pushed; `sr restack` stops at it (dependents untouched) while `sr submit` steps over it (dependents still pushed), and both name the exclusion in their output.
+- [ ] Naming a frozen branch explicitly (`sr restack --branch <frozen>`, submitting while on it) is not blocked.
+- [ ] A dependent of a never-pushed frozen branch reports the missing base against the frozen branch, not as a raw GitHub error.
 - [ ] Non-interactive submit fails on Content Divergence and on a blocked restack, and still force-pushes when preflight proved it lossless.
 - [ ] `--dry-run` mutates nothing — no rollback token, no remediation, no restack, no writes.
 - [ ] `--update-only` restricts the push set instead of being ignored.

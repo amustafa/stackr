@@ -4,7 +4,7 @@
 - **ID**: plan-2026-07-31-sr-submit-preflight
 - **Status**: draft
 - **Specification**: codev/specs/7-sr-submit-preflight.md
-- **ADRs**: 0014 (Push Record, not content inspection), 0015 (Frozen is a wall), 0002 (undo is graph-only — bounds the rollback token), 0003 (CLI over MCP — `gh` shell-outs)
+- **ADRs**: 0014 (Push Record, not content inspection), 0015 (Frozen is operation-dependent), 0002 (undo is graph-only — bounds the rollback token), 0003 (CLI over MCP — `gh` shell-outs)
 - **Created**: 2026-07-31
 
 ## Executive Summary
@@ -162,20 +162,26 @@ Rework `Submit` into three phases; publish nothing until everything is settled.
 - [ ] `go test ./internal/engine/` green.
 - [ ] Manual E2E against a scratch GitHub repo: restacked 3-branch stack submits with no prompts and no `-f`.
 
-### Phase 5: Frozen is a wall
+### Phase 5: Frozen is operation-dependent
 **Dependencies**: None (independent; sequenced here to keep Phase 4's diff readable)
 
 #### Objectives
-Make `Frozen` mean what ADR-0015 and the glossary say.
+Make `Frozen` mean what ADR-0015 and the glossary say: a **wall** for restack, a **hole** for submit.
 
 #### Deliverables
 - [ ] `restackBranches` (`restack.go:140`) skips a frozen branch and marks it in the existing `blocked` map so its
-      lineage inherits the exclusion — the same mechanism already used for conflicts.
+      lineage inherits the exclusion — the same mechanism already used for conflicts. This is the **wall**.
 - [ ] Frozen is reported **always**, independent of `SkipBlocked`, and never returns an error: it is an intention,
       not a failure. `skippedBranch.reason` distinguishes "frozen" from "conflict".
-- [ ] `buildPushSet` excludes a frozen branch and its full upstack; the excluded lineage is named in submit's output.
-- [ ] Tests: mid-stack frozen branch is not rebased, its children are not rebased, both are excluded from the push set,
-      and `sr sync` (which calls `Restack`) honours it.
+- [ ] Explicit subjects bypass the wall: `Restack` with `opts.Branch` naming a frozen branch (or `opts.Only`)
+      restacks it. Only the sweep skips it.
+- [ ] `buildPushSet` keeps submit's **hole**: the frozen branch alone is dropped, its dependents stay in the set.
+      The exclusion is named in submit's output.
+- [ ] A dependent whose parent is frozen **and has no remote ref** cannot be given a valid PR base. Detect it in
+      reconcile and report it against the frozen branch rather than surfacing GitHub's rejection of the dependent.
+- [ ] Tests: mid-stack frozen branch is not rebased and neither are its children (wall); the same stack still pushes
+      every non-frozen branch (hole); `sr sync` honours the wall; explicitly naming a frozen branch restacks it;
+      never-pushed frozen parent yields the dedicated message.
 
 #### Verification
 - [ ] `go test ./internal/engine/ -run 'Restack|Frozen'` green.

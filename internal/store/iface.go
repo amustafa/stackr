@@ -29,4 +29,10 @@ type Backend interface {
 
 	SaveSnapshot(operation, branch string) error
 	PopSnapshot() (*UndoEvent, []byte, error)
+
+	// Push Records are Local Data by design — see ADR-0014. They must never be
+	// written into the shared metadata at refs/stackr/data.
+	PushRecordFor(remote, branch string) string
+	SetPushRecord(remote, branch, sha string) error
+	DeletePushRecordsForBranch(branch string) error
 }

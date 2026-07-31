@@ -169,6 +169,20 @@ func (rs *RefStore) WritePRInfo(info *PRInfo) error {
 
 // ---------- Local-only data (stays on filesystem) ----------
 
+// ---------- Push Records (Local Data — never shared, see ADR-0014) ----------
+
+func (rs *RefStore) PushRecordFor(remote, branch string) string {
+	return rs.local.PushRecordFor(remote, branch)
+}
+
+func (rs *RefStore) SetPushRecord(remote, branch, sha string) error {
+	return rs.local.SetPushRecord(remote, branch, sha)
+}
+
+func (rs *RefStore) DeletePushRecordsForBranch(branch string) error {
+	return rs.local.DeletePushRecordsForBranch(branch)
+}
+
 func (rs *RefStore) ReadRebaseState() (*RebaseState, error) {
 	return rs.local.ReadRebaseState()
 }

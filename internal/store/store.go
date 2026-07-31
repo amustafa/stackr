@@ -32,6 +32,7 @@ func (s *Store) Init() error {
 		s.root,
 		filepath.Join(s.root, "undo"),
 		filepath.Join(s.root, "undo", "snapshots"),
+		filepath.Join(s.root, "rollback"),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
