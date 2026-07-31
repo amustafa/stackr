@@ -7,6 +7,13 @@
       "url": "https://github.com/amustafa/stackr/pull/13",
       "baseBranch": "skill-prompt-block"
     },
+    "am/pr21-followups": {
+      "number": 25,
+      "title": "Fix multi-commit squash detection and address remaining #21 review comments",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/25",
+      "baseBranch": "main"
+    },
     "am/restack-bugfix": {
       "number": 14,
       "title": "fix(restack): honor --downstack/--upstack scope and stop mislabeling worktree collisions",
