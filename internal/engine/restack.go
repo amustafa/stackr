@@ -104,7 +104,16 @@ func Restack(c *context.Context, opts RestackOpts) error {
 	// Remember where we are.
 	origBranch, _ := c.Git.CurrentBranch()
 
-	return restackBranches(c, toRestack, origBranch, opts.SkipBlocked)
+	// Freezing withdraws a branch from operations that sweep over it, not from
+	// the user's direct instruction. Naming a branch as the subject of the
+	// command is an explicit instruction, so it is exempt from the frozen wall
+	// (ADR-0015).
+	exempt := map[string]bool{}
+	if opts.Branch != "" || opts.Only {
+		exempt[branch] = true
+	}
+
+	return restackBranches(c, toRestack, origBranch, opts.SkipBlocked, exempt)
 }
 
 // skippedBranch records a branch that could not be cleanly restacked.
@@ -122,7 +131,14 @@ type skippedBranch struct {
 // branches are still restacked. When skipBlocked is false, the first conflict
 // halts the operation: a merge conflict in the current worktree is saved so
 // `sr continue` can resume it, and any other failure is returned as-is.
-func restackBranches(c *context.Context, branches []string, origBranch string, skipBlocked bool) error {
+//
+// A frozen branch is a wall for this operation regardless of skipBlocked
+// (ADR-0015): it is not rebased, and neither is anything stacked on it, because
+// replaying dependents onto a parent tip that was deliberately left in place is
+// meaningless. Freezing is an intention rather than a failure, so it is always
+// reported and never returns an error. Branches in exempt were named explicitly
+// by the user and are restacked even when frozen.
+func restackBranches(c *context.Context, branches []string, origBranch string, skipBlocked bool, exempt map[string]bool) error {
 	g, err := c.Store.ReadGraph()
 	if err != nil {
 		return err
@@ -147,6 +163,14 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 		if blocked[b.ParentBranchName] {
 			blocked[name] = true
 			skipped = append(skipped, skippedBranch{name, "stacked on a branch that was left unrestacked"})
+			continue
+		}
+
+		// The frozen wall. Marking it blocked is what propagates the exclusion
+		// up its lineage, reusing the same mechanism as a conflict.
+		if b.Frozen && !exempt[name] {
+			blocked[name] = true
+			skipped = append(skipped, skippedBranch{name, "frozen"})
 			continue
 		}
 
@@ -274,7 +298,10 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 		_ = c.Git.Checkout(origBranch)
 	}
 
-	if skipBlocked && !c.Quiet && len(skipped) > 0 {
+	// Frozen branches are reported whether or not skipBlocked is set: an
+	// operation that quietly treats one branch differently from its neighbours
+	// is indistinguishable from a bug (ADR-0015).
+	if !c.Quiet && len(skipped) > 0 && (skipBlocked || anyFrozen(skipped)) {
 		fmt.Printf("\nRestacked %d branch(es); left %d unrestacked:\n", len(restacked), len(skipped))
 		for _, s := range skipped {
 			fmt.Printf("  - %s (%s)\n", s.name, s.reason)
@@ -282,6 +309,15 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 	}
 
 	return nil
+}
+
+func anyFrozen(skipped []skippedBranch) bool {
+	for _, s := range skipped {
+		if s.reason == "frozen" {
+			return true
+		}
+	}
+	return false
 }
 
 // sameWorktree reports whether two worktree paths refer to the same directory,

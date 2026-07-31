@@ -144,7 +144,9 @@ func continueRebase(c *context.Context) error {
 	}
 
 	if len(rs.Pending) > 0 {
-		err := restackBranches(c, rs.Pending, rs.OrigBranch, false)
+		// Resuming a paused restack: no branch here was named explicitly, so the
+		// frozen wall applies to all of them.
+		err := restackBranches(c, rs.Pending, rs.OrigBranch, false, nil)
 		if err != nil {
 			return err
 		}

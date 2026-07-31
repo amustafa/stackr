@@ -153,3 +153,74 @@ func TestRestack_DirtyWorktree_SkipsLineage(t *testing.T) {
 		t.Error("skip-blocked restack wrote a rebase state; nothing is resumable here")
 	}
 }
+
+// freeze marks a branch frozen in the graph.
+func freeze(t *testing.T, c *context.Context, name string) {
+	t.Helper()
+	g, err := c.Store.ReadGraph()
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	g.Branches[name].Frozen = true
+	if err := c.Store.WriteGraph(g); err != nil {
+		t.Fatalf("write graph: %v", err)
+	}
+}
+
+// ADR-0015: Restack treats a frozen branch as a WALL. Rebasing its dependents
+// onto a parent tip that was deliberately left in place is meaningless, so the
+// exclusion spreads up the lineage.
+func TestRestack_FrozenBranchIsAWall(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+	freeze(t, c, "b")
+
+	aBefore, _ := c.Git.RevParse("a")
+	bBefore, _ := c.Git.RevParse("b")
+	cBefore, _ := c.Git.RevParse("c")
+
+	if err := Restack(c, RestackOpts{Branch: trunk}); err != nil {
+		t.Fatalf("restack: %v", err)
+	}
+
+	aAfter, _ := c.Git.RevParse("a")
+	if aAfter == aBefore {
+		t.Error("branch a is below the wall and should still have been restacked")
+	}
+	if bAfter, _ := c.Git.RevParse("b"); bAfter != bBefore {
+		t.Error("frozen branch b must not be rebased")
+	}
+	if cAfter, _ := c.Git.RevParse("c"); cAfter != cBefore {
+		t.Error("branch c is stacked on frozen b and must not be rebased either")
+	}
+}
+
+// Freezing withdraws a branch from operations that sweep over it, not from a
+// direct instruction naming it.
+func TestRestack_ExplicitlyNamedFrozenBranchIsRestacked(t *testing.T) {
+	c, _ := setupRestackStack(t)
+	freeze(t, c, "a")
+
+	aBefore, _ := c.Git.RevParse("a")
+
+	if err := Restack(c, RestackOpts{Branch: "a", Only: true}); err != nil {
+		t.Fatalf("restack --only a: %v", err)
+	}
+
+	if aAfter, _ := c.Git.RevParse("a"); aAfter == aBefore {
+		t.Error("naming a frozen branch explicitly must restack it")
+	}
+}
+
+// A frozen branch is an intention, not a failure, so it must never turn a
+// restack into an error — including when SkipBlocked is false.
+func TestRestack_FrozenNeverErrorsWithoutSkipBlocked(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+	freeze(t, c, "b")
+
+	if err := Restack(c, RestackOpts{Branch: trunk, SkipBlocked: false}); err != nil {
+		t.Fatalf("a frozen branch must not fail the restack: %v", err)
+	}
+	if c.Store.HasRebaseState() {
+		t.Error("a frozen branch must not leave resumable rebase state")
+	}
+}
