@@ -11,8 +11,8 @@
     },
     "gh-stacks-display": {
       "parentBranchName": "gh-stacks-api",
-      "parentBranchRevision": "c009e146d0a87b7df938353fc726215ac1f54c4a",
-      "branchRevision": "312c79a839b4ed282f1743f00a29cdb0fb68717a",
+      "parentBranchRevision": "7f5f5b7a23b87ee726c592f0e8d21576edd96be1",
+      "branchRevision": "201e50abb9a5b094b80d9efa5d05690e34bad09f",
       "children": []
     },
     "main": {
