@@ -13,7 +13,7 @@
     "gh-stacks-api": {
       "parentBranchName": "am/sync-worktree-cleanup",
       "parentBranchRevision": "7816f734e159034960e67ffe3747806aa4b9a18d",
-      "branchRevision": "27289f0bf73b0aec14778e3172ffa8d6735e4afa",
+      "branchRevision": "46a2c2123f0571da4ad962943e88b11f98fa34b3",
       "children": [
         "gh-stacks-display"
       ]
