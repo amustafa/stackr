@@ -1,6 +1,9 @@
 package git
 
-import "strings"
+import (
+	"bytes"
+	"strings"
+)
 
 // RevParse resolves a revision to a full SHA.
 func (r *Runner) RevParse(rev string) (string, error) {
@@ -99,6 +102,66 @@ func (r *Runner) AllCommitsUpstream(upstream, branch, base string) (bool, error)
 		}
 	}
 	return true, nil
+}
+
+// SquashMergedUpstream reports whether the combined diff of (base, branch]
+// matches the diff of some single commit reachable from upstream since base.
+//
+// AllCommitsUpstream compares patch IDs commit-by-commit, so it never matches
+// when GitHub's squash merge collapses this branch's N commits into trunk's 1:
+// there is no per-commit equivalent upstream, only a combined one. This
+// extends the same patch-id equivalence from one-to-one to many-to-one by
+// treating the branch's own commits as a single unit and looking for a
+// one-commit match upstream instead.
+func (r *Runner) SquashMergedUpstream(upstream, branch, base string) (bool, error) {
+	branchID, err := r.patchID(base, branch)
+	if err != nil || branchID == "" {
+		return false, err
+	}
+
+	shas, err := r.RunGitCapture("rev-list", base+".."+upstream)
+	if err != nil {
+		return false, err
+	}
+	if shas == "" {
+		return false, nil
+	}
+
+	for _, sha := range strings.Split(shas, "\n") {
+		id, err := r.patchID(sha+"^", sha)
+		if err != nil {
+			continue
+		}
+		if id != "" && id == branchID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// patchID returns the stable patch ID for the diff between from and to, or ""
+// when the range introduces no changes.
+func (r *Runner) patchID(from, to string) (string, error) {
+	diff, _, err := r.RunGitCaptureAll("diff", from, to)
+	if err != nil {
+		return "", err
+	}
+	if diff == "" {
+		return "", nil
+	}
+
+	var stdout bytes.Buffer
+	cmd := r.command("patch-id", "--stable")
+	cmd.Stdin = strings.NewReader(diff)
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	fields := strings.Fields(stdout.String())
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
 }
 
 // RepoRoot returns the absolute path of the repository root.

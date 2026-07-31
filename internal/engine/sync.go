@@ -174,6 +174,14 @@ func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trun
 	if baseErr != nil {
 		return false
 	}
-	landed, err := c.Git.AllCommitsUpstream(trunk, name, base.SHA)
+	if landed, err := c.Git.AllCommitsUpstream(trunk, name, base.SHA); err == nil && landed {
+		return true
+	}
+
+	// 4. Local fallback for a squash merge: git cherry (used above) compares
+	//    patch IDs one commit at a time, so it can't see a squash merge that
+	//    collapsed this branch's several commits into trunk's one. Compare the
+	//    branch's combined diff against each trunk commit's diff instead.
+	landed, err := c.Git.SquashMergedUpstream(trunk, name, base.SHA)
 	return err == nil && landed
 }

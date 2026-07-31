@@ -91,8 +91,14 @@ func ghMergedHeadBranches() map[string]bool {
 	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
 	defer cancel()
 
+	// --limit caps the result at the 200 most recent matches of whatever the
+	// query sorts by. Without an explicit sort, gh orders by creation date, so
+	// a branch merged today but created long ago could fall outside the
+	// window. "sort:updated-desc" orders by recency of merge instead, which is
+	// what determines whether cleanup needs to see it.
 	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
 		"--state", "merged",
+		"--search", "sort:updated-desc",
 		"--limit", "200",
 		"--json", "headRefName")
 	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1")
