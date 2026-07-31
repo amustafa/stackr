@@ -82,6 +82,18 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	if origBranch != "" && origBranch != trunk {
 		if g.Has(origBranch) {
 			_ = c.Git.Checkout(origBranch)
+		} else if !c.Quiet {
+			// origBranch was cleaned up as merged. cleanMergedBranches can't
+			// remove the worktree we're running from — the earlier checkout to
+			// trunk already repurposed it, and a process can't safely delete
+			// the directory it's executing in. Surface that so a worktree that
+			// existed only for this branch doesn't sit forgotten as a stale
+			// trunk checkout.
+			if gitDir, derr := c.Git.GitDir(); derr == nil {
+				if commonDir, cerr := c.Git.GitCommonDir(); cerr == nil && gitDir != commonDir {
+					fmt.Printf("Note: %s was cleaned up as merged; this worktree is now on %s. Remove it with `sr worktree remove` if you no longer need it.\n", origBranch, trunk)
+				}
+			}
 		}
 	}
 
