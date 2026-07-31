@@ -140,18 +140,22 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 
 // submitStack pushes downstack ancestors, current branch, and upstack dependents.
 func submitStack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
-	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+	var pushed []string
+
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
 
 	b := g.Branches[current]
-	if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName); err != nil {
+	if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName, &pushed); err != nil {
 		return err
 	}
 
-	if err := pushUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+	if err := pushUpstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
+
+	syncGitHubStacks(g, prInfo, pushed, c.Quiet)
 
 	if err := c.Store.WritePRInfo(prInfo); err != nil {
 		return err
@@ -212,11 +216,13 @@ func submitSingle(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *stor
 func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string, existing *PRResult) error {
 	fmt.Printf("PR #%d already exists for %s (%s)\n", existing.Number, current, existing.URL)
 
-	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+	var pushed []string
+
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
 
-	if err := pushBranch(c, cfg, opts, prInfo, current, g.Branches[current].ParentBranchName); err != nil {
+	if err := pushBranch(c, cfg, opts, prInfo, current, g.Branches[current].ParentBranchName, &pushed); err != nil {
 		return err
 	}
 
@@ -231,9 +237,11 @@ func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *st
 	pr.Title = existing.Title
 	pr.Draft = existing.Draft
 
-	if err := offerUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+	if err := offerUpstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
+
+	syncGitHubStacks(g, prInfo, pushed, c.Quiet)
 
 	return c.Store.WritePRInfo(prInfo)
 }
@@ -242,14 +250,16 @@ func submitExisting(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *st
 func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
 	b := g.Branches[current]
 
+	var pushed []string
+
 	// Push downstack ancestors first (always, all modes).
-	if err := pushDownstack(c, opts, g, cfg, prInfo, current); err != nil {
+	if err := pushDownstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
 
 	// Programmatic mode: title and body provided, skip prompts.
 	if opts.Title != "" {
-		if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName); err != nil {
+		if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName, &pushed); err != nil {
 			return err
 		}
 		if opts.DryRun {
@@ -270,6 +280,7 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 				fmt.Printf("Created PR #%d: %s\n", result.Number, result.URL)
 			}
 		}
+		syncGitHubStacks(g, prInfo, pushed, c.Quiet)
 		return c.Store.WritePRInfo(prInfo)
 	}
 
@@ -278,9 +289,10 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 		if !c.Quiet {
 			fmt.Println("Non-interactive mode, pushing only")
 		}
-		if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName); err != nil {
+		if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName, &pushed); err != nil {
 			return err
 		}
+		syncGitHubStacks(g, prInfo, pushed, c.Quiet)
 		return c.Store.WritePRInfo(prInfo)
 	}
 
@@ -295,7 +307,7 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 		return err
 	}
 
-	if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName); err != nil {
+	if err := pushBranch(c, cfg, opts, prInfo, current, b.ParentBranchName, &pushed); err != nil {
 		return err
 	}
 
@@ -351,15 +363,17 @@ func submitNewBranch(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *s
 	}
 
 	// Offer to push upstack.
-	if err := offerUpstack(c, opts, g, cfg, prInfo, current); err != nil {
+	if err := offerUpstack(c, opts, g, cfg, prInfo, current, &pushed); err != nil {
 		return err
 	}
+
+	syncGitHubStacks(g, prInfo, pushed, c.Quiet)
 
 	return c.Store.WritePRInfo(prInfo)
 }
 
 // pushDownstack pushes all downstack ancestors of current (excluding current and trunk).
-func pushDownstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+func pushDownstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string, pushed *[]string) error {
 	downstack := g.Downstack(current)
 	// Downstack returns [current, parent, grandparent, ...trunk].
 	// Push in bottom-up order (reverse), skip current (index 0) and trunk.
@@ -375,7 +389,7 @@ func pushDownstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *sto
 	}
 	for _, name := range ancestors {
 		a := g.Branches[name]
-		if err := pushBranch(c, cfg, opts, prInfo, name, a.ParentBranchName); err != nil {
+		if err := pushBranch(c, cfg, opts, prInfo, name, a.ParentBranchName, pushed); err != nil {
 			return err
 		}
 	}
@@ -383,7 +397,7 @@ func pushDownstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *sto
 }
 
 // pushUpstack pushes all upstack dependents of current (excluding current).
-func pushUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+func pushUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string, pushed *[]string) error {
 	upstack := g.Upstack(current)
 	if len(upstack) <= 1 {
 		return nil
@@ -397,7 +411,7 @@ func pushUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store
 		if ub == nil || ub.IsTrunk || ub.Frozen {
 			continue
 		}
-		if err := pushBranch(c, cfg, opts, prInfo, name, ub.ParentBranchName); err != nil {
+		if err := pushBranch(c, cfg, opts, prInfo, name, ub.ParentBranchName, pushed); err != nil {
 			return err
 		}
 	}
@@ -405,7 +419,7 @@ func pushUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store
 }
 
 // offerUpstack prompts to push upstack dependents (interactive mode only).
-func offerUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string) error {
+func offerUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *store.Config, prInfo *store.PRInfo, current string, pushed *[]string) error {
 	if !c.Interactive {
 		return nil
 	}
@@ -419,13 +433,16 @@ func offerUpstack(c *context.Context, opts SubmitOpts, g *graph.Graph, cfg *stor
 		return err
 	}
 	if yes {
-		return pushUpstack(c, opts, g, cfg, prInfo, current)
+		return pushUpstack(c, opts, g, cfg, prInfo, current, pushed)
 	}
 	return nil
 }
 
 // pushBranch pushes a single branch to the remote and records basic metadata.
-func pushBranch(c *context.Context, cfg *store.Config, opts SubmitOpts, prInfo *store.PRInfo, name, parent string) error {
+// Successfully pushed branches are appended to `pushed` in bottom-up order,
+// which is the set syncGitHubStacks later segments into GitHub stacks. Dry runs
+// never contribute, so no stack is registered for work that was not pushed.
+func pushBranch(c *context.Context, cfg *store.Config, opts SubmitOpts, prInfo *store.PRInfo, name, parent string, pushed *[]string) error {
 	if opts.DryRun {
 		fmt.Printf("[dry-run] Would push %s to %s/%s (base: %s)\n", name, cfg.Remote, name, parent)
 		return nil
@@ -453,6 +470,10 @@ func pushBranch(c *context.Context, cfg *store.Config, opts SubmitOpts, prInfo *
 		pr.State = "open"
 	}
 	pr.Draft = opts.Draft
+
+	if pushed != nil {
+		*pushed = append(*pushed, name)
+	}
 
 	return nil
 }
