@@ -5,7 +5,8 @@
       "parentBranchName": "main",
       "parentBranchRevision": "5461d86cced5152ba71fd8a6fb1c3735fa3f2a1e",
       "branchRevision": "5461d86cced5152ba71fd8a6fb1c3735fa3f2a1e",
-      "children": []
+      "children": [],
+      "description": "Fix sync leaving orphaned worktrees behind for merged branches"
     },
     "gh-stacks-api": {
       "parentBranchName": "main",
