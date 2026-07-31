@@ -81,8 +81,12 @@
       "baseBranch": "spec-5-sr-sandbox"
     },
     "submit-preflight": {
-      "state": "open",
-      "baseBranch": "gh-stacks-display"
+      "number": 29,
+      "title": "Preflight: settle content divergence before submit pushes anything",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/29",
+      "baseBranch": "gh-stacks-display",
+      "stackNumber": 28
     }
   }
 }
