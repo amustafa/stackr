@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -98,11 +99,15 @@ func Preflight(c *context.Context, opts SubmitOpts, cfg *store.Config, set []str
 		}
 
 		if class.Disposition != DispNeedsDecision {
-			if class.Disposition != DispNoPush || opts.UpdateOnly {
-				result.Ready = append(result.Ready, class)
-			} else {
-				result.Ready = append(result.Ready, class)
+			// --no-force means never force-push, including the losslessly
+			// force-pushable case that is otherwise the whole point of this
+			// feature. The flag is a contract about the operation, not about
+			// the risk.
+			if opts.NoForce && class.Disposition == DispPushForce {
+				return result, fmt.Errorf(
+					"%s needs a force push (its history was rewritten locally) — refusing with --no-force", name)
 			}
+			result.Ready = append(result.Ready, class)
 			continue
 		}
 
@@ -127,7 +132,11 @@ func Preflight(c *context.Context, opts SubmitOpts, cfg *store.Config, set []str
 		// The remaining actions all mutate local. Record where we were first so
 		// the user has a way back.
 		if result.RollbackID == "" {
-			id, err := writeRollbackToken(c, set)
+			// Every tracked branch, not just the push set: remediation restacks
+			// the full upstack, which reaches branches this submit never
+			// intended to publish. A token that only covered the push set could
+			// not put those back.
+			id, err := writeRollbackToken(c, trackedBranches(g))
 			if err != nil && !c.Quiet {
 				fmt.Printf("Note: could not write a rollback token: %v\n", err)
 			}
@@ -308,7 +317,14 @@ func restackAfterRemediation(c *context.Context, opts SubmitOpts, name string,
 	if err != nil {
 		return err
 	}
-	for _, child := range g.UpstackTopo(name) {
+
+	// The remediated branch itself can be blocked too — we just rewrote it, and
+	// rebasing it onto its parent may conflict. Checking only its dependents
+	// would let a branch that is not actually stacked on its parent sail
+	// through, and its PR would then show its parent's commits as its own.
+	subjects := append([]string{name}, g.UpstackTopo(name)...)
+
+	for _, child := range subjects {
 		b := g.Branches[child]
 		if b == nil || b.IsTrunk || dropped[child] {
 			continue
@@ -341,6 +357,18 @@ func restackAfterRemediation(c *context.Context, opts SubmitOpts, name string,
 	}
 
 	return nil
+}
+
+// trackedBranches lists every non-trunk branch in the graph.
+func trackedBranches(g *graph.Graph) []string {
+	var names []string
+	for name, b := range g.Branches {
+		if b != nil && !b.IsTrunk {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func branchTips(c *context.Context) (map[string]string, error) {

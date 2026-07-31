@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
@@ -370,5 +371,40 @@ func TestClassify_PushRecordShortCircuitsContentTiers(t *testing.T) {
 	e.wantDisposition(got, DispPushForce)
 	if got.RemoteSHA != remoteSHA {
 		t.Errorf("lease pin = %s, want the SHA we inspected %s", got.RemoteSHA, remoteSHA)
+	}
+}
+
+// A Push Record mismatch says somebody else wrote to this branch, and the
+// content tiers must NOT be able to clear it.
+//
+// The trap: a collaborator force-pushes a branch with a commit REMOVED, and we
+// have independently restacked. Their deletion now sits outside the merge base
+// entirely, so merging them in is a no-op and every content test reports
+// "nothing to lose" — while force-pushing would resurrect the commit they
+// deliberately dropped.
+func TestClassify_PushRecordMismatchIsNotClearableByContentTiers(t *testing.T) {
+	e := newDivEnv(t)
+	e.git(e.ctx.Git, "checkout", "-b", "feat")
+	e.commit(e.ctx.Git, "f1.txt", "one\n", "c1")
+	e.commit(e.ctx.Git, "risky.txt", "risky\n", "c2 risky")
+	e.pushAndRecord("feat")
+
+	// Collaborator drops the risky commit and force-pushes.
+	e.git(e.collab, "fetch", "origin")
+	e.git(e.collab, "checkout", "-b", "feat", "origin/feat")
+	e.git(e.collab, "reset", "--hard", "HEAD~1")
+	e.git(e.collab, "push", "--force", "origin", "feat")
+
+	// We restack over a moved trunk, so the refs genuinely diverge and their
+	// deletion falls outside the merge base.
+	e.git(e.ctx.Git, "checkout", "main")
+	e.commit(e.ctx.Git, "trunk.txt", "moved\n", "trunk moves")
+	e.git(e.ctx.Git, "checkout", "feat")
+	e.git(e.ctx.Git, "rebase", "main")
+
+	got := e.classify("feat")
+	e.wantDisposition(got, DispNeedsDecision)
+	if !strings.Contains(got.Reason, "somebody else pushed") {
+		t.Errorf("reason = %q, want it to name the push-record mismatch", got.Reason)
 	}
 }

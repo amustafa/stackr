@@ -168,15 +168,26 @@ func pushPhase(c *context.Context, cfg *store.Config, ready []Classification) ([
 		return nil, fmt.Errorf("fetch failed: %w", err)
 	}
 
+	// Verify every branch before publishing any of them. Letting the lease catch
+	// a change later would be safe for that branch but would already have
+	// published the ones below it — the partial update this phase exists to
+	// avoid. That includes branches we expected to be ABSENT: a ref created
+	// during preflight fails the empty-expect lease just as surely.
 	for _, class := range ready {
-		if class.RemoteSHA == "" {
-			continue
-		}
-		now, err := c.Git.RevParse(cfg.Remote + "/" + class.Branch)
-		if err != nil {
-			continue // the ref vanished; the lease will catch it
-		}
-		if now != class.RemoteSHA {
+		ref := cfg.Remote + "/" + class.Branch
+		now, err := c.Git.RevParse(ref)
+		exists := err == nil
+
+		switch {
+		case class.RemoteSHA == "" && exists:
+			return nil, fmt.Errorf(
+				"%s was created on the remote while you were resolving — nothing was pushed.\n"+
+					"Run `sr submit` again to re-check it.", class.Branch)
+		case class.RemoteSHA != "" && !exists:
+			return nil, fmt.Errorf(
+				"%s was deleted from the remote while you were resolving — nothing was pushed.\n"+
+					"Run `sr submit` again to re-check it.", class.Branch)
+		case class.RemoteSHA != "" && now != class.RemoteSHA:
 			return nil, fmt.Errorf(
 				"%s changed on the remote while you were resolving — nothing was pushed.\n"+
 					"Run `sr submit` again to re-check it.", class.Branch)
@@ -211,9 +222,18 @@ func pushPhase(c *context.Context, cfg *store.Config, ready []Classification) ([
 		}
 
 		// Record what we just left there. This is what makes the next submit of
-		// this branch provably safe to force (ADR-0014).
-		if newSHA, err := c.Git.RevParse(class.Branch); err == nil {
-			_ = c.Store.SetPushRecord(cfg.Remote, class.Branch, newSHA)
+		// this branch provably safe to force (ADR-0014) — so a failure to write
+		// it must be said out loud, not swallowed: without the record, a later
+		// rewind of this branch by someone else looks like an ordinary
+		// fast-forward and gets silently resurrected.
+		newSHA, err := c.Git.RevParse(class.Branch)
+		if err == nil {
+			err = c.Store.SetPushRecord(cfg.Remote, class.Branch, newSHA)
+		}
+		if err != nil {
+			fmt.Printf("Warning: %s was pushed but its push record could not be saved (%v).\n"+
+				"  The next submit of this branch will fall back to comparing content.\n",
+				class.Branch, err)
 		}
 		pushed = append(pushed, class.Branch)
 	}

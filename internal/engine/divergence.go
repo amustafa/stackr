@@ -119,16 +119,34 @@ func ClassifyBranch(c *context.Context, remote, branch string) (Classification, 
 
 	// ---- Ref Divergence from here on. Force would be required. ----
 
-	// Tier 0: the only sound test. If the remote still holds what we left there,
-	// everything on it is ours and overwriting it loses nothing.
-	if rec := c.Store.PushRecordFor(remote, branch); rec != "" && rec == remoteSHA {
+	// Tier 0: the only sound test, with three outcomes.
+	//
+	//   match    — the remote still holds what we left there, so everything on
+	//              it is ours and overwriting it loses nothing.
+	//   mismatch — somebody else wrote. Stop. The content tiers below CANNOT
+	//              clear this: if the collaborator's write dropped a commit and
+	//              our branch was independently restacked, their deletion sits
+	//              outside the merge base entirely, so the merge is a no-op and
+	//              every content test reports "safe" while force-pushing
+	//              resurrects the commit they removed. Absence of evidence is
+	//              not evidence of absence here.
+	//   absent   — we have never pushed this branch from this clone, so we have
+	//              no claim either way; fall through to the heuristics.
+	switch rec := c.Store.PushRecordFor(remote, branch); {
+	case rec == remoteSHA && rec != "":
 		res.Disposition = DispPushForce
+		return res, nil
+	case rec != "":
+		res.Disposition = DispNeedsDecision
+		res.Reason = fmt.Sprintf("somebody else pushed to this branch: we last left %s there, it now holds %s",
+			abbrev(rec), abbrev(remoteSHA))
+		res.RemoteOnly, _ = c.Git.RemoteOnlyCommits(branch, remoteRef)
 		return res, nil
 	}
 
-	// Tiers 1 and 2 are content heuristics. They can only ever downgrade a
-	// missing tier-0 match to "probably fine"; they must never be consulted to
-	// overturn a tier-0 mismatch (see the rewind branch above).
+	// Tiers 1 and 2 are content heuristics, reached only when tier 0 has nothing
+	// to say. They can promote "we don't know" to "probably fine"; they are
+	// never consulted to overturn a tier-0 mismatch.
 	if !c.Git.SupportsMergeTreeWriteTree() {
 		res.Disposition = DispNeedsDecision
 		res.Reason = "git is too old for `merge-tree --write-tree` (needs 2.38+) to check this safely"

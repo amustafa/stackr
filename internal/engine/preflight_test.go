@@ -463,3 +463,24 @@ func TestRollback_DefaultsToTheMostRecentToken(t *testing.T) {
 		t.Fatalf("Rollback with no id should use the latest token: %v", err)
 	}
 }
+
+// --no-force is a contract about the operation, not about the risk: it must
+// refuse even the lossless force push that is otherwise the point of preflight.
+func TestPreflight_NoForceRefusesEvenALosslessForcePush(t *testing.T) {
+	e := setupPreflightStack(t)
+
+	e.git(e.ctx.Git, "checkout", "main")
+	e.commit(e.ctx.Git, "trunk.txt", "moved\n", "trunk moves")
+	if err := Restack(e.ctx, RestackOpts{Branch: "main"}); err != nil {
+		t.Fatalf("restack: %v", err)
+	}
+
+	// Sanity: without the flag this is a clean, lossless force push.
+	if _, err := Preflight(e.ctx, SubmitOpts{}, cfgFor(t, e), []string{"a"}); err != nil {
+		t.Fatalf("expected a lossless force push without --no-force: %v", err)
+	}
+
+	if _, err := Preflight(e.ctx, SubmitOpts{NoForce: true}, cfgFor(t, e), []string{"a"}); err == nil {
+		t.Fatal("--no-force must refuse a force push even when it is provably lossless")
+	}
+}
