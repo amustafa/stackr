@@ -82,6 +82,18 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	if origBranch != "" && origBranch != trunk {
 		if g.Has(origBranch) {
 			_ = c.Git.Checkout(origBranch)
+		} else if !c.Quiet {
+			// origBranch was cleaned up as merged. cleanMergedBranches can't
+			// remove the worktree we're running from — the earlier checkout to
+			// trunk already repurposed it, and a process can't safely delete
+			// the directory it's executing in. Surface that so a worktree that
+			// existed only for this branch doesn't sit forgotten as a stale
+			// trunk checkout.
+			if gitDir, derr := c.Git.GitDir(); derr == nil {
+				if commonDir, cerr := c.Git.GitCommonDir(); cerr == nil && gitDir != commonDir {
+					fmt.Printf("Note: %s was cleaned up as merged; this worktree is now on %s. Remove it with `sr worktree remove` if you no longer need it.\n", origBranch, trunk)
+				}
+			}
 		}
 	}
 
@@ -136,6 +148,24 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 		if err := g.RemoveBranch(name); err != nil {
 			continue
 		}
+
+		// A branch checked out in another worktree can't be force-deleted —
+		// git refuses — and even where it could, the worktree itself would be
+		// left behind as a checkout of a branch that no longer exists in the
+		// graph. Remove that worktree first. The worktree we're running from
+		// is skipped: it can't remove itself, and if it held this branch,
+		// Sync already moved it onto trunk before cleanup ran, so
+		// WorktreeForBranch no longer associates it with name anyway.
+		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" && !sameWorktree(wtPath, c.Git.Dir) {
+			if rmErr := c.Git.WorktreeRemove(wtPath); rmErr == nil {
+				if !c.Quiet {
+					fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+				}
+			} else if !c.Quiet {
+				fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+			}
+		}
+
 		_ = c.Git.DeleteBranch(name, true)
 		cleaned = append(cleaned, name)
 	}
