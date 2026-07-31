@@ -136,6 +136,24 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 		if err := g.RemoveBranch(name); err != nil {
 			continue
 		}
+
+		// A branch checked out in another worktree can't be force-deleted —
+		// git refuses — and even where it could, the worktree itself would be
+		// left behind as a checkout of a branch that no longer exists in the
+		// graph. Remove that worktree first. The worktree we're running from
+		// is skipped: it can't remove itself, and if it held this branch,
+		// Sync already moved it onto trunk before cleanup ran, so
+		// WorktreeForBranch no longer associates it with name anyway.
+		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" && !sameWorktree(wtPath, c.Git.Dir) {
+			if rmErr := c.Git.WorktreeRemove(wtPath); rmErr == nil {
+				if !c.Quiet {
+					fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+				}
+			} else if !c.Quiet {
+				fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+			}
+		}
+
 		_ = c.Git.DeleteBranch(name, true)
 		cleaned = append(cleaned, name)
 	}
