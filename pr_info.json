@@ -28,6 +28,13 @@
       "url": "https://github.com/amustafa/stackr/pull/21",
       "baseBranch": "main"
     },
+    "am/sync-worktree-cleanup": {
+      "number": 26,
+      "title": "sync: clean up worktrees left behind by merged branches",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/26",
+      "baseBranch": "main"
+    },
     "gh-stacks-api": {
       "number": 22,
       "title": "feat(submit): register stacks on GitHub after submit",
