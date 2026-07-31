@@ -243,7 +243,7 @@ func linearSegments(g *graph.Graph, submitted []string) [][]string {
 // created and pushed by the time this runs, so a repository without the preview
 // enabled, an offline machine, or an older gh must not turn a successful submit
 // into a failure. Problems are reported, not fatal.
-func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, quiet bool) {
+func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, quiet, interactive bool) {
 	for _, segment := range linearSegments(g, submitted) {
 		seg := mapSegment(prInfo, segment)
 
@@ -251,7 +251,15 @@ func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, 
 			continue
 		}
 
-		stack, err := reconcileStack(seg.recorded, seg.prNumbers, seg.baseByPR)
+		// Clear the recorded numbers before reconciling: reconcileStack may
+		// dissolve the group, and a failure between the unstack and the create
+		// must leave the PRs merely ungrouped rather than pointing at a stack
+		// number that no longer exists.
+		for _, name := range seg.branches {
+			prInfo.Branches[name].StackNumber = 0
+		}
+
+		stack, err := reconcileStack(seg.recorded, seg.prNumbers, seg.baseByPR, interactive)
 		if err != nil {
 			fmt.Printf("Warning: could not sync GitHub stack for %s: %v\n",
 				strings.Join(seg.branches, " -> "), err)
@@ -335,15 +343,7 @@ func rebuildStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*GH
 	// stack, so submit's own attempt to do this earlier necessarily failed for
 	// every PR here — retry now that the groups are dissolved, or the create
 	// fails right back with the same chain-validation error.
-	for _, n := range prNumbers {
-		base, ok := baseByPR[n]
-		if !ok || base == "" {
-			continue
-		}
-		if err := ghUpdatePRBase(n, base); err != nil {
-			fmt.Printf("Warning: could not retarget PR #%d to %s: %v\n", n, base, err)
-		}
-	}
+	retargetBases(prNumbers, baseByPR)
 
 	return ghCreateStack(prNumbers)
 }
@@ -452,7 +452,7 @@ func anyPROpen(prNumbers []int) (bool, error) {
 //
 // baseByPR maps each PR number to the base branch it should have, per the
 // local graph — used only to re-sync base refs when a stack is rebuilt.
-func reconcileStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*GHStack, error) {
+func reconcileStack(recorded []int, prNumbers []int, baseByPR map[int]string, interactive bool) (*GHStack, error) {
 	if len(recorded) == 0 {
 		return ghCreateStack(prNumbers)
 	}
@@ -481,7 +481,7 @@ func reconcileStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*
 	if !found {
 		// The remote stack's top is not in our segment at all: the two have
 		// genuinely diverged, not merely fallen behind. See resolveDivergedStack.
-		return resolveDivergedStack(existing, remote, prNumbers)
+		return resolveDivergedStack(recorded, remote, prNumbers, baseByPR, interactive)
 	}
 
 	if len(newBelow) > 0 {
@@ -529,17 +529,39 @@ func reconcileStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*
 // destroys remote intent, but lets GitHub drift from local indefinitely with
 // only a warning that is easy to miss in a long submit.
 //
-// TODO(implement): choose the reconciliation policy.
+// The policy is to REBUILD, because stackr treats the local graph as the source
+// of truth everywhere else (see restack.go), and a stacking tool whose remote
+// grouping silently disagrees with its local graph is worse than one that is
+// occasionally opinionated.
 //
-// Things worth weighing: stackr already treats the local graph as the source
-// of truth everywhere else (see restack.go), which argues for rebuilding. But
-// unstack-then-create is not atomic — if ghCreateStack fails after ghUnstack
-// succeeds, the PRs are left ungrouped and prInfo still points at a dead stack
-// number, so a failure path needs to at least clear the recorded number.
-// Also consider whether a non-interactive submit should ever be destructive,
-// given c.Interactive exists and is threaded through the submit flow.
-func resolveDivergedStack(existing int, remote *GHStack, prNumbers []int) (*GHStack, error) {
-	return nil, fmt.Errorf(
-		"local stack %v has diverged from GitHub stack #%d %v — reconciliation policy not implemented",
-		prNumbers, existing, remote.prNumbers())
+// Two guards make that safe enough. The caller clears the recorded stack number
+// BEFORE we unstack, so a failure between unstack and create leaves the PRs
+// merely ungrouped — recoverable on the next submit — rather than pointing at a
+// stack number that no longer exists. And the rebuild only happens when a human
+// is present: an unattended submit warns and leaves the remote alone rather than
+// regrouping someone else's PRs.
+func resolveDivergedStack(recorded []int, remote *GHStack, prNumbers []int,
+	baseByPR map[int]string, interactive bool) (*GHStack, error) {
+
+	if !interactive {
+		fmt.Printf("Warning: local stack %v has diverged from GitHub stack #%d %v — "+
+			"leaving the GitHub grouping alone. Re-run interactively to rebuild it.\n",
+			prNumbers, remote.Number, remote.prNumbers())
+		return remote, nil
+	}
+
+	return rebuildStack(recorded, prNumbers, baseByPR)
+}
+
+// retargetBases points each PR's base at what the local graph says it should be.
+func retargetBases(prNumbers []int, baseByPR map[int]string) {
+	for _, n := range prNumbers {
+		base, ok := baseByPR[n]
+		if !ok || base == "" {
+			continue
+		}
+		if err := ghUpdatePRBase(n, base); err != nil {
+			fmt.Printf("Warning: could not retarget PR #%d to %s: %v\n", n, base, err)
+		}
+	}
 }
