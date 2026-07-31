@@ -21,6 +21,13 @@
       "url": "https://github.com/amustafa/stackr/pull/21",
       "baseBranch": "main"
     },
+    "gh-stacks-api": {
+      "number": 22,
+      "title": "feat(submit): register stacks on GitHub after submit",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/22",
+      "baseBranch": "main"
+    },
     "skill-prompt-block": {
       "number": 10,
       "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
