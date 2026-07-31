@@ -21,10 +21,11 @@ type ReviewOpts struct {
 
 // BranchReview aggregates review state for one branch's PR.
 type BranchReview struct {
-	Branch   string         `json:"branch"`
-	PRNumber int            `json:"prNumber"`
-	PRURL    string         `json:"prUrl"`
-	Threads  []ReviewThread `json:"threads"`
+	Branch      string         `json:"branch"`
+	PRNumber    int            `json:"prNumber"`
+	PRURL       string         `json:"prUrl"`
+	StackNumber int            `json:"stackNumber,omitempty"`
+	Threads     []ReviewThread `json:"threads"`
 }
 
 // ReviewPrepareResult is the --aiprepare output.
@@ -124,11 +125,17 @@ func ReviewPrepare(c *context.Context) (*ReviewPrepareResult, error) {
 			continue
 		}
 
+		stackNumber := 0
+		if pr := prInfo.Branches[name]; pr != nil {
+			stackNumber = pr.StackNumber
+		}
+
 		stack = append(stack, BranchReview{
-			Branch:   name,
-			PRNumber: prNumber,
-			PRURL:    prURL,
-			Threads:  threads,
+			Branch:      name,
+			PRNumber:    prNumber,
+			PRURL:       prURL,
+			StackNumber: stackNumber,
+			Threads:     threads,
 		})
 		totalThreads += len(threads)
 	}

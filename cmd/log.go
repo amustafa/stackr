@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/amustafa/stackr/internal/engine"
 	"github.com/amustafa/stackr/internal/graph"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +29,14 @@ var logCmd = &cobra.Command{
 			CurrentBranch: current,
 			ShowAll:       logFlagAll,
 			Reverse:       logFlagReverse,
+		}
+
+		// Annotate branches with their PR and GitHub stack. Best-effort: a repo
+		// that has never submitted has no PR metadata, and the tree still renders.
+		if prInfo, err := ctx.Store.ReadPRInfo(); err == nil {
+			opts.AnnotateFn = func(branch string) string {
+				return engine.BranchAnnotation(g, prInfo, branch)
+			}
 		}
 
 		if logFlagLong {
