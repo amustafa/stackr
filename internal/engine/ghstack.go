@@ -251,6 +251,7 @@ func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, 
 			branches  []string
 			existing  int
 		)
+		baseByPR := map[int]string{}
 		for _, name := range segment {
 			pr := prInfo.Branches[name]
 			if pr == nil || pr.Number == 0 {
@@ -258,6 +259,7 @@ func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, 
 			}
 			prNumbers = append(prNumbers, pr.Number)
 			branches = append(branches, name)
+			baseByPR[pr.Number] = pr.BaseBranch
 			if existing == 0 {
 				existing = pr.StackNumber
 			}
@@ -267,7 +269,7 @@ func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, 
 			continue
 		}
 
-		stack, err := reconcileStack(existing, prNumbers)
+		stack, err := reconcileStack(existing, prNumbers, baseByPR)
 		if err != nil {
 			fmt.Printf("Warning: could not sync GitHub stack for %s: %v\n",
 				strings.Join(branches, " -> "), err)
@@ -300,27 +302,73 @@ func stackNeedsRebuild(remote *GHStack) bool {
 	return remote == nil || !remote.Open || len(remote.PullRequests) == 0
 }
 
-// prsAboveTop splits prNumbers at the remote stack's current top, returning the
-// PRs that sit above it — the ones still to be added — and whether the top was
-// found in our chain at all.
+// classifyAgainstRemote locates remote's entire PR sequence as a contiguous,
+// exact-order run within prNumbers, and splits what's left into newBelow (what
+// precedes the run) and newAbove (what follows it). found is false when
+// remote's sequence cannot be located as a contiguous run at all — a genuine
+// divergence, not just growth in one direction.
 //
 // GitHub drops merged PRs out of a stack and retargets what remains, so the
-// remote list is normally a suffix of ours rather than an exact match. A top we
-// cannot find means the two have genuinely diverged, not merely fallen behind.
-func prsAboveTop(prNumbers []int, remoteNums []int) (newPRs []int, found bool) {
+// remote list is normally a suffix of ours rather than an exact match — that
+// shows up as a non-empty newBelow, same shape as a PR genuinely inserted
+// below the stack's current bottom (e.g. a restack onto a new base branch).
+// The two are positionally indistinguishable; callers must check newBelow's
+// PR state to tell them apart before deciding whether a rebuild is needed.
+func classifyAgainstRemote(prNumbers, remoteNums []int) (newBelow, newAbove []int, found bool) {
 	if len(remoteNums) == 0 {
-		return prNumbers, true
+		return nil, prNumbers, true
 	}
+	if len(remoteNums) > len(prNumbers) {
+		return nil, nil, false
+	}
+
 	top := remoteNums[len(remoteNums)-1]
 	for i, n := range prNumbers {
-		if n == top {
-			return prNumbers[i+1:], true
+		if n != top {
+			continue
+		}
+		start := i - len(remoteNums) + 1
+		if start < 0 {
+			continue
+		}
+		matched := true
+		for j, want := range remoteNums {
+			if prNumbers[start+j] != want {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return prNumbers[:start], prNumbers[i+1:], true
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 
-func reconcileStack(existing int, prNumbers []int) (*GHStack, error) {
+// anyPROpen reports whether any of the given PR numbers is still open on
+// GitHub, as opposed to merged or closed.
+func anyPROpen(prNumbers []int) (bool, error) {
+	for _, n := range prNumbers {
+		out, err := ghStackAPI("GET", fmt.Sprintf("repos/{owner}/{repo}/pulls/%d", n), nil)
+		if err != nil {
+			return false, err
+		}
+		var pr struct {
+			State string `json:"state"`
+		}
+		if err := json.Unmarshal(out, &pr); err != nil {
+			return false, fmt.Errorf("failed to parse PR #%d response: %w", n, err)
+		}
+		if pr.State == "open" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// baseByPR maps each PR number to the base branch it should have, per the
+// local graph — used only to re-sync base refs when a stack is rebuilt.
+func reconcileStack(existing int, prNumbers []int, baseByPR map[int]string) (*GHStack, error) {
 	if existing == 0 {
 		return ghCreateStack(prNumbers)
 	}
@@ -334,17 +382,59 @@ func reconcileStack(existing int, prNumbers []int) (*GHStack, error) {
 		return ghCreateStack(prNumbers)
 	}
 
-	newPRs, found := prsAboveTop(prNumbers, remote.prNumbers())
+	newBelow, newAbove, found := classifyAgainstRemote(prNumbers, remote.prNumbers())
 	if !found {
 		// The remote stack's top is not in our segment at all: the two have
 		// genuinely diverged, not merely fallen behind. See resolveDivergedStack.
 		return resolveDivergedStack(existing, remote, prNumbers)
 	}
 
-	if len(newPRs) == 0 {
+	if len(newBelow) > 0 {
+		// GitHub's stacks API can only extend a stack upward — ghAddToStack
+		// appends above the current top, there is no way to attach a PR below
+		// the existing base. That's fine when newBelow is only PRs GitHub
+		// already dropped for merging (the common case), but if any of them
+		// are still open, a PR has genuinely been inserted below the stack's
+		// current bottom (e.g. `sr restack` onto a new base branch), and the
+		// only way to reflect that on GitHub is to rebuild the stack outright.
+		open, err := anyPROpen(newBelow)
+		if err != nil {
+			return nil, err
+		}
+		if open {
+			// GitHub refuses to create a stack containing a PR that's already
+			// a member of another one, so the old grouping has to be
+			// dissolved first. Not atomic: if ghCreateStack fails after this
+			// succeeds, the PRs are left ungrouped and existing now points at
+			// a dead stack number — the same known gap noted on
+			// resolveDivergedStack, not one this path introduces.
+			if err := ghUnstack(existing); err != nil {
+				return nil, fmt.Errorf("could not unstack #%d before rebuilding: %w", existing, err)
+			}
+
+			// ghCreateStack validates that each PR's base ref equals the
+			// previous PR's head ref. A PR's base can't be retargeted while
+			// it's grouped into a stack, so submit's own attempt to do this
+			// earlier necessarily failed for every PR here — retry now that
+			// the group is dissolved, or the create below fails right back
+			// with the same chain-validation error.
+			for _, n := range prNumbers {
+				base, ok := baseByPR[n]
+				if !ok || base == "" {
+					continue
+				}
+				if err := ghUpdatePRBase(n, base); err != nil {
+					fmt.Printf("Warning: could not retarget PR #%d to %s: %v\n", n, base, err)
+				}
+			}
+			return ghCreateStack(prNumbers)
+		}
+	}
+
+	if len(newAbove) == 0 {
 		return remote, nil
 	}
-	return ghAddToStack(existing, newPRs)
+	return ghAddToStack(existing, newAbove)
 }
 
 // resolveDivergedStack decides what to do when the stack recorded on GitHub no

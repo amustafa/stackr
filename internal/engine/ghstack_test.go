@@ -174,33 +174,40 @@ func TestStackNeedsRebuild(t *testing.T) {
 	}
 }
 
-func TestPRsAboveTop(t *testing.T) {
+func TestClassifyAgainstRemote(t *testing.T) {
 	tests := map[string]struct {
-		local, remote []int
-		wantNew       []int
-		wantFound     bool
+		local, remote        []int
+		wantBelow, wantAbove []int
+		wantFound            bool
 	}{
-		"nothing new":        {[]int{42, 43}, []int{42, 43}, []int{}, true},
-		"one to append":      {[]int{42, 43, 44}, []int{42, 43}, []int{44}, true},
-		"remote lost merged": {[]int{42, 43, 44}, []int{43}, []int{44}, true},
-		"empty remote":       {[]int{42, 43}, nil, []int{42, 43}, true},
-		"diverged":           {[]int{42, 43}, []int{99}, nil, false},
+		"nothing new":              {[]int{42, 43}, []int{42, 43}, []int{}, []int{}, true},
+		"one to append":            {[]int{42, 43, 44}, []int{42, 43}, []int{}, []int{44}, true},
+		"remote lost merged":       {[]int{42, 43, 44}, []int{43}, []int{42}, []int{44}, true},
+		"empty remote":             {[]int{42, 43}, nil, []int{}, []int{42, 43}, true},
+		"diverged":                 {[]int{42, 43}, []int{99}, nil, nil, false},
+		"new PR below (#26)":       {[]int{26, 22, 23}, []int{22, 23}, []int{26}, []int{}, true},
+		"below and above":          {[]int{26, 22, 23, 44}, []int{22, 23}, []int{26}, []int{44}, true},
+		"remote longer than local": {[]int{42}, []int{41, 42}, nil, nil, false},
 	}
 	for name, tc := range tests {
-		gotNew, gotFound := prsAboveTop(tc.local, tc.remote)
+		gotBelow, gotAbove, gotFound := classifyAgainstRemote(tc.local, tc.remote)
 		if gotFound != tc.wantFound {
 			t.Errorf("%s: found = %v, want %v", name, gotFound, tc.wantFound)
 			continue
 		}
-		if len(gotNew) != len(tc.wantNew) {
-			t.Errorf("%s: newPRs = %v, want %v", name, gotNew, tc.wantNew)
-			continue
-		}
-		for i := range tc.wantNew {
-			if gotNew[i] != tc.wantNew[i] {
-				t.Errorf("%s: newPRs = %v, want %v", name, gotNew, tc.wantNew)
-				break
+		checkInts := func(label string, got, want []int) {
+			if len(got) != len(want) {
+				t.Errorf("%s: %s = %v, want %v", name, label, got, want)
+				return
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Errorf("%s: %s = %v, want %v", name, label, got, want)
+					return
+				}
 			}
 		}
+		checkInts("newBelow", gotBelow, tc.wantBelow)
+		checkInts("newAbove", gotAbove, tc.wantAbove)
 	}
 }

@@ -465,6 +465,18 @@ func pushBranch(c *context.Context, cfg *store.Config, opts SubmitOpts, prInfo *
 		prInfo.Branches[name] = &store.BranchPR{}
 	}
 	pr := prInfo.Branches[name]
+
+	// The local parent is the source of truth; retarget the PR's base to
+	// match whenever it drifted (e.g. a restack reparented this branch).
+	// Best-effort: this fails while the PR is grouped into a GitHub stack
+	// (its base can't change mid-group), which syncGitHubStacks handles by
+	// unstacking and retrying once it detects the same drift below.
+	if pr.Number != 0 && pr.BaseBranch != "" && pr.BaseBranch != parent {
+		if err := ghUpdatePRBase(pr.Number, parent); err != nil && c.Debug {
+			fmt.Printf("Note: could not retarget PR #%d to %s yet: %v\n", pr.Number, parent, err)
+		}
+	}
+
 	pr.BaseBranch = parent
 	if pr.State == "" {
 		pr.State = "open"
