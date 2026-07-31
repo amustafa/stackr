@@ -603,7 +603,7 @@ reflog. If a base is lost beyond recovery — usually after heavy raw-git surger
 plus an expired reflog — stackr stops rather than guess, because guessing
 duplicates or drops commits:
 
-```
+```text
 cannot determine which commits belong to feat-3: recorded base 0000000 is
 missing or is not an ancestor of the branch.
 ```

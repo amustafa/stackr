@@ -263,6 +263,45 @@ func TestBranchHasLanded_SquashMergedBranch_IsDetected(t *testing.T) {
 	}
 }
 
+// git cherry — the tier-3 fallback's original mechanism — compares patch IDs
+// one commit at a time, so it never matches when several branch commits are
+// squashed into trunk's single commit. branchHasLanded must fall through to
+// the many-to-one comparison instead of giving up.
+func TestBranchHasLanded_MultiCommitSquashMergedBranch_IsDetected(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "feature"}); err != nil {
+		t.Fatalf("create feature: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "line one\n", "feat: part one")
+	commitFile(t, c, "feature.txt", "line one\nline two\n", "feat: part two")
+	syncTip(t, c, "feature")
+
+	// Simulate GitHub's "Squash and merge": both commits land on trunk as one
+	// brand-new commit with the combined content and a different SHA.
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "line one\nline two\n", "feat: add feature (#7)")
+
+	if merged, _ := c.Git.IsMergedInto("feature", trunk); merged {
+		t.Fatal("test setup is wrong: a squash merge must not be an ancestor of trunk")
+	}
+
+	g, _ := c.Store.ReadGraph()
+	base, err := resolveBase(c, "feature", g.Branches["feature"])
+	if err != nil {
+		t.Fatalf("resolveBase: %v", err)
+	}
+	if landed, _ := c.Git.AllCommitsUpstream(trunk, "feature", base.SHA); landed {
+		t.Fatal("test setup is wrong: per-commit patch-id comparison must not match a multi-commit squash")
+	}
+
+	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}) {
+		t.Error("multi-commit squash-merged branch not detected as landed; sync would replay it onto trunk")
+	}
+}
+
 // The inverse: a branch with genuinely unlanded work must never be reported as
 // merged, or sync would delete unmerged commits.
 func TestBranchHasLanded_UnmergedBranch_IsNotDetected(t *testing.T) {

@@ -3,7 +3,6 @@ package git
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 )
@@ -67,10 +66,7 @@ func (r *Runner) AnchorCommits(ref, message string, shas []string) error {
 
 	var stdout, stderr bytes.Buffer
 	cmd := r.command(args...)
-	if cmd.Env == nil {
-		cmd.Env = os.Environ()
-	}
-	cmd.Env = append(cmd.Env,
+	cmd.Env = append(cmd.Environ(),
 		"GIT_AUTHOR_NAME=stackr",
 		"GIT_AUTHOR_EMAIL=stackr@localhost",
 		"GIT_AUTHOR_DATE="+anchorEpoch,
