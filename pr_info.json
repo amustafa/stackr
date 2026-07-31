@@ -41,8 +41,8 @@
       "title": "feat(submit): register stacks on GitHub after submit",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/22",
-      "baseBranch": "am/sync-worktree-cleanup",
-      "stackNumber": 27
+      "baseBranch": "main",
+      "stackNumber": 28
     },
     "gh-stacks-display": {
       "number": 23,
@@ -50,7 +50,7 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/23",
       "baseBranch": "gh-stacks-api",
-      "stackNumber": 27
+      "stackNumber": 28
     },
     "skill-prompt-block": {
       "number": 10,
@@ -79,6 +79,10 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/8",
       "baseBranch": "spec-5-sr-sandbox"
+    },
+    "submit-preflight": {
+      "state": "open",
+      "baseBranch": "gh-stacks-display"
     }
   }
 }
