@@ -13,7 +13,9 @@
       "parentBranchName": "gh-stacks-api",
       "parentBranchRevision": "472a4394b308059e09811bcb99514641a3e108ed",
       "branchRevision": "06c0b1f9ce35c9887b83643329dd419aca5b54b3",
-      "children": []
+      "children": [
+        "submit-preflight"
+      ]
     },
     "main": {
       "branchRevision": "aafbbc7be9c9940748096ee913def8eaf0be8f3f",
@@ -21,6 +23,13 @@
         "gh-stacks-api"
       ],
       "isTrunk": true
+    },
+    "submit-preflight": {
+      "parentBranchName": "gh-stacks-display",
+      "parentBranchRevision": "06c0b1f9ce35c9887b83643329dd419aca5b54b3",
+      "branchRevision": "06c0b1f9ce35c9887b83643329dd419aca5b54b3",
+      "children": [],
+      "description": "sr submit preflight: settle content divergence before pushing"
     }
   }
 }
