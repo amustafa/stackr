@@ -34,7 +34,7 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/26",
       "baseBranch": "main",
-      "stackNumber": 24
+      "stackNumber": 27
     },
     "gh-stacks-api": {
       "number": 22,
@@ -42,7 +42,7 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/22",
       "baseBranch": "am/sync-worktree-cleanup",
-      "stackNumber": 24
+      "stackNumber": 27
     },
     "gh-stacks-display": {
       "number": 23,
@@ -50,7 +50,7 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/23",
       "baseBranch": "gh-stacks-api",
-      "stackNumber": 24
+      "stackNumber": 27
     },
     "skill-prompt-block": {
       "number": 10,
