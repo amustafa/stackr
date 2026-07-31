@@ -1,6 +1,12 @@
 {
   "version": 1,
   "branches": {
+    "am/pr21-followups": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
+      "branchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
+      "children": []
+    },
     "gh-stacks-api": {
       "parentBranchName": "main",
       "parentBranchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
@@ -18,7 +24,8 @@
     "main": {
       "branchRevision": "be901285e78997c7bcbfd56f081086327b904d01",
       "children": [
-        "gh-stacks-api"
+        "gh-stacks-api",
+        "am/pr21-followups"
       ],
       "isTrunk": true
     }
