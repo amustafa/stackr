@@ -4,7 +4,7 @@
     "am/sync-worktree-cleanup": {
       "parentBranchName": "main",
       "parentBranchRevision": "5461d86cced5152ba71fd8a6fb1c3735fa3f2a1e",
-      "branchRevision": "96c00178e912e0576cf170c62b4defd2976e8761",
+      "branchRevision": "7816f734e159034960e67ffe3747806aa4b9a18d",
       "children": [],
       "description": "Fix sync leaving orphaned worktrees behind for merged branches"
     },
