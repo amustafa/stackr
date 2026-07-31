@@ -31,16 +31,20 @@ type GHStack struct {
 	Base   struct {
 		Ref string `json:"ref"`
 	} `json:"base"`
-	PullRequests []struct {
-		Number   int     `json:"number"`
-		State    string  `json:"state"`
-		Draft    bool    `json:"draft"`
-		MergedAt *string `json:"merged_at"`
-		Head     struct {
-			Ref string `json:"ref"`
-			SHA string `json:"sha"`
-		} `json:"head"`
-	} `json:"pull_requests"`
+	PullRequests []GHStackPR `json:"pull_requests"`
+}
+
+// GHStackPR is one pull request as reported inside a stack. GitHub returns a
+// trimmed view here, not the full PR object.
+type GHStackPR struct {
+	Number   int     `json:"number"`
+	State    string  `json:"state"`
+	Draft    bool    `json:"draft"`
+	MergedAt *string `json:"merged_at"`
+	Head     struct {
+		Ref string `json:"ref"`
+		SHA string `json:"sha"`
+	} `json:"head"`
 }
 
 // prNumbers returns the stack's member PR numbers in bottom-to-top order.
@@ -285,6 +289,37 @@ func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, 
 // reconcileStack brings one segment's stack on GitHub in line with the local
 // PR chain: creating it, extending it, or leaving it alone if it already
 // matches. Returns nil when there is nothing to record.
+// stackNeedsRebuild reports whether a recorded stack can no longer be extended,
+// so the next submit has to start a fresh one.
+//
+// A stack whose pull requests have all merged is NOT deleted: it stays
+// queryable with open:false and an emptied member list. Checking only for a
+// 404 would therefore miss the most common end-of-life case and leave us
+// POSTing /add against a closed stack.
+func stackNeedsRebuild(remote *GHStack) bool {
+	return remote == nil || !remote.Open || len(remote.PullRequests) == 0
+}
+
+// prsAboveTop splits prNumbers at the remote stack's current top, returning the
+// PRs that sit above it — the ones still to be added — and whether the top was
+// found in our chain at all.
+//
+// GitHub drops merged PRs out of a stack and retargets what remains, so the
+// remote list is normally a suffix of ours rather than an exact match. A top we
+// cannot find means the two have genuinely diverged, not merely fallen behind.
+func prsAboveTop(prNumbers []int, remoteNums []int) (newPRs []int, found bool) {
+	if len(remoteNums) == 0 {
+		return prNumbers, true
+	}
+	top := remoteNums[len(remoteNums)-1]
+	for i, n := range prNumbers {
+		if n == top {
+			return prNumbers[i+1:], true
+		}
+	}
+	return nil, false
+}
+
 func reconcileStack(existing int, prNumbers []int) (*GHStack, error) {
 	if existing == 0 {
 		return ghCreateStack(prNumbers)
@@ -294,31 +329,13 @@ func reconcileStack(existing int, prNumbers []int) (*GHStack, error) {
 	if err != nil {
 		return nil, err
 	}
-	if remote == nil {
-		// The recorded stack is gone (dissolved, or fully merged). Start over.
+
+	if stackNeedsRebuild(remote) {
 		return ghCreateStack(prNumbers)
 	}
 
-	// GitHub drops merged PRs out of the stack and retargets what remains, so
-	// the remote list is a suffix of ours, not necessarily an exact match.
-	// Anything we hold above the remote's top is what still needs adding.
-	remoteNums := remote.prNumbers()
-	top := 0
-	if len(remoteNums) > 0 {
-		top = remoteNums[len(remoteNums)-1]
-	}
-
-	newPRs := prNumbers
-	found := false
-	for i, n := range prNumbers {
-		if n == top {
-			newPRs = prNumbers[i+1:]
-			found = true
-			break
-		}
-	}
-
-	if !found && len(remoteNums) > 0 {
+	newPRs, found := prsAboveTop(prNumbers, remote.prNumbers())
+	if !found {
 		// The remote stack's top is not in our segment at all: the two have
 		// genuinely diverged, not merely fallen behind. See resolveDivergedStack.
 		return resolveDivergedStack(existing, remote, prNumbers)

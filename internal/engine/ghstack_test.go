@@ -139,3 +139,68 @@ func TestLinearSegments_NoBranchesYieldsNoSegments(t *testing.T) {
 		t.Errorf("linearSegments = %s, want no segments", formatSegments(segments))
 	}
 }
+
+func openStack(prs ...int) *GHStack {
+	s := &GHStack{Number: 7, Open: true}
+	for _, n := range prs {
+		s.PullRequests = append(s.PullRequests, GHStackPR{Number: n, State: "open"})
+	}
+	return s
+}
+
+// A stack whose PRs have all merged stays queryable with open:false rather than
+// 404ing, so it must be treated as finished — otherwise the next submit adds to
+// a closed stack instead of starting a new one.
+func TestStackNeedsRebuild(t *testing.T) {
+	closed := openStack(42, 43)
+	closed.Open = false
+
+	emptied := openStack()
+	emptied.Open = true
+
+	tests := map[string]struct {
+		stack *GHStack
+		want  bool
+	}{
+		"missing stack":     {nil, true},
+		"closed stack":      {closed, true},
+		"open but emptied":  {emptied, true},
+		"open with members": {openStack(42, 43), false},
+	}
+	for name, tc := range tests {
+		if got := stackNeedsRebuild(tc.stack); got != tc.want {
+			t.Errorf("%s: stackNeedsRebuild = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestPRsAboveTop(t *testing.T) {
+	tests := map[string]struct {
+		local, remote []int
+		wantNew       []int
+		wantFound     bool
+	}{
+		"nothing new":        {[]int{42, 43}, []int{42, 43}, []int{}, true},
+		"one to append":      {[]int{42, 43, 44}, []int{42, 43}, []int{44}, true},
+		"remote lost merged": {[]int{42, 43, 44}, []int{43}, []int{44}, true},
+		"empty remote":       {[]int{42, 43}, nil, []int{42, 43}, true},
+		"diverged":           {[]int{42, 43}, []int{99}, nil, false},
+	}
+	for name, tc := range tests {
+		gotNew, gotFound := prsAboveTop(tc.local, tc.remote)
+		if gotFound != tc.wantFound {
+			t.Errorf("%s: found = %v, want %v", name, gotFound, tc.wantFound)
+			continue
+		}
+		if len(gotNew) != len(tc.wantNew) {
+			t.Errorf("%s: newPRs = %v, want %v", name, gotNew, tc.wantNew)
+			continue
+		}
+		for i := range tc.wantNew {
+			if gotNew[i] != tc.wantNew[i] {
+				t.Errorf("%s: newPRs = %v, want %v", name, gotNew, tc.wantNew)
+				break
+			}
+		}
+	}
+}
