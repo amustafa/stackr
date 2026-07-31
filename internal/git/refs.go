@@ -2,6 +2,8 @@ package git
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -169,14 +171,49 @@ func (r *Runner) RepoRoot() (string, error) {
 	return r.RunGitCapture("rev-parse", "--show-toplevel")
 }
 
-// GitDir returns the path to the .git directory.
+// GitDir returns the absolute path to the .git directory.
 // In a worktree this returns the worktree-specific dir (e.g. .git/worktrees/name).
 func (r *Runner) GitDir() (string, error) {
-	return r.RunGitCapture("rev-parse", "--git-dir")
+	return r.absoluteGitPath("--git-dir")
 }
 
-// GitCommonDir returns the shared .git directory.
+// absoluteGitPath resolves one of git's directory queries to an absolute path.
+//
+// `--path-format=absolute` does this natively from git 2.31; older git needs the
+// relative answer joined onto the directory git was run in, which is the
+// Runner's Dir (or the process working directory when unset).
+func (r *Runner) absoluteGitPath(query string) (string, error) {
+	if out, err := r.RunGitCapture("rev-parse", "--path-format=absolute", query); err == nil && out != "" {
+		return out, nil
+	}
+
+	out, err := r.RunGitCapture("rev-parse", query)
+	if err != nil {
+		return "", err
+	}
+	if filepath.IsAbs(out) {
+		return out, nil
+	}
+
+	base := r.Dir
+	if base == "" {
+		if wd, wderr := os.Getwd(); wderr == nil {
+			base = wd
+		}
+	}
+	return filepath.Join(base, out), nil
+}
+
+// GitCommonDir returns the shared .git directory as an absolute path.
 // Unlike GitDir, this always returns the main .git dir even from a worktree.
+//
+// git answers `--git-common-dir` relative to its own working directory, so the
+// bare result is usually just ".git". Handing that to the local store would root
+// it relative to the *process* working directory: run from a subdirectory, and
+// undo snapshots, rebase state and Push Records all land in a stray
+// <subdir>/.git/.stackr and become invisible to the next invocation. For the
+// Push Record that is not merely untidy — a record that cannot be found silently
+// downgrades the one sound tier of the divergence ladder (ADR-0014).
 func (r *Runner) GitCommonDir() (string, error) {
-	return r.RunGitCapture("rev-parse", "--git-common-dir")
+	return r.absoluteGitPath("--git-common-dir")
 }

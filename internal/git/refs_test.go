@@ -107,3 +107,52 @@ func TestSquashMergedUpstream_NotLanded(t *testing.T) {
 		t.Fatal("SquashMergedUpstream reported landed for a branch that never merged")
 	}
 }
+
+// git answers --git-common-dir relative to its own working directory, so the
+// raw result is usually just ".git". Returning that would root the local store
+// relative to the *process* working directory, scattering undo snapshots,
+// rebase state and Push Records into stray directories whenever sr is run from
+// a subdirectory — and a Push Record that cannot be found silently downgrades
+// the only sound tier of the divergence ladder (ADR-0014).
+func TestGitDirsAreAbsolute(t *testing.T) {
+	r := tempRunner(t)
+	writeFile(t, r, "seed.txt", "seed")
+	r.RunGitCapture("add", "seed.txt")
+	if err := r.RunGit("commit", "-m", "seed"); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	sub := filepath.Join(r.Dir, "nested", "deeper")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	for _, dir := range []string{r.Dir, sub} {
+		runner := &Runner{Dir: dir}
+
+		common, err := runner.GitCommonDir()
+		if err != nil {
+			t.Fatalf("GitCommonDir from %s: %v", dir, err)
+		}
+		if !filepath.IsAbs(common) {
+			t.Errorf("GitCommonDir from %s = %q, want an absolute path", dir, common)
+		}
+
+		gitDir, err := runner.GitDir()
+		if err != nil {
+			t.Fatalf("GitDir from %s: %v", dir, err)
+		}
+		if !filepath.IsAbs(gitDir) {
+			t.Errorf("GitDir from %s = %q, want an absolute path", dir, gitDir)
+		}
+	}
+
+	// The same repo must resolve to the same store location from anywhere in it.
+	fromRoot, _ := (&Runner{Dir: r.Dir}).GitCommonDir()
+	fromSub, _ := (&Runner{Dir: sub}).GitCommonDir()
+	rootReal, _ := filepath.EvalSymlinks(fromRoot)
+	subReal, _ := filepath.EvalSymlinks(fromSub)
+	if rootReal != subReal {
+		t.Errorf("GitCommonDir differs by cwd: %q vs %q", rootReal, subReal)
+	}
+}

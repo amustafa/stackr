@@ -53,8 +53,8 @@ A branch excluded from automatic operations. No implied reason — the user deci
 - **Wall** — **Restack** stops at the frozen branch. Rebasing its dependents is meaningless when the base they would rebase onto was deliberately left in place.
 - **Hole** — **Submit** skips only the frozen branch; branches above and below it are still pushed, because each can carry changes of its own.
 
-Explicitly naming a frozen branch as the subject of an operation is not an automatic operation, and is not blocked. Being an intention rather than a failure, freezing is always skipped and reported, never an error.
-_Avoid_: blocked, skipped (those describe failures; freezing is a choice)
+Within a cascade, freezing is an intention rather than a failure: always skipped and reported, never an error. But an operation that takes a single named branch as its subject has no remainder to continue with, so naming a frozen branch as that subject is an error (`ErrFrozen`) — **Move** rejects a frozen source outright. Being the *target* of such an operation is never blocked; ordinary wall/hole semantics resume against the resulting shape.
+_Avoid_: locked, pinned
 
 **Push Record**:
 The commit SHA a given clone believes it last left on a branch's remote ref, keyed by remote and branch. Local-only, never shared — its meaning is "*this* clone put that there", so a record travelling between clones would assert someone else's push as our own. Written by every operation that settles local against remote, not only by pushes.
