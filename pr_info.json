@@ -8,7 +8,10 @@
       "baseBranch": "skill-prompt-block"
     },
     "am/fix-move": {
-      "state": "open",
+      "number": 30,
+      "title": "Move is a repoint plus a restack, with target validation and an interactive picker",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/30",
       "baseBranch": "main"
     },
     "am/pr21-followups": {
