@@ -27,4 +27,10 @@ type BranchPR struct {
 	URL        string `json:"url,omitempty"`
 	Draft      bool   `json:"draft,omitempty"`
 	BaseBranch string `json:"baseBranch,omitempty"`
+
+	// StackNumber is the GitHub stack this PR belongs to, or 0 if it is not
+	// registered on GitHub. Every member of a stack carries the same number,
+	// which is what lets a later submit find the stack and extend it rather
+	// than trying to create a duplicate.
+	StackNumber int `json:"stackNumber,omitempty"`
 }

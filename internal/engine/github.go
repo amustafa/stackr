@@ -71,6 +71,35 @@ func ghPRForBranch(branch string) (*PRResult, error) {
 	return &result, nil
 }
 
+// ghUpdatePRBase retargets an existing PR's base branch on GitHub.
+//
+// This is REST, not `gh pr edit --base`: that command's mutation also
+// requests project-card data GitHub has since deprecated, which makes the
+// whole edit fail with a GraphQL error even though the base-branch change
+// itself would have succeeded. PATCHing the REST endpoint directly sidesteps
+// that field entirely.
+func ghUpdatePRBase(number int, base string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "api",
+		"--method", "PATCH",
+		fmt.Sprintf("repos/{owner}/{repo}/pulls/%d", number),
+		"-f", "base="+base)
+	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1")
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("gh api PATCH pulls/%d timed out after %s", number, ghTimeout)
+		}
+		return fmt.Errorf("gh api PATCH pulls/%d failed: %s", number, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 // ghMergedHeadBranches returns the set of head-branch names whose PRs are
 // merged, in a single batched query.
 //
