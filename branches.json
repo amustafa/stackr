@@ -53,9 +53,23 @@
     "am/pr-meta": {
       "parentBranchName": "am/ghstack-reconcile",
       "parentBranchRevision": "1ec9e58311c551c034cd43a0acd3f842b7eab829",
-      "branchRevision": "1ec9e58311c551c034cd43a0acd3f842b7eab829",
+      "branchRevision": "a626c23c4422b8087f47e50fde99af07bbe0fbde",
       "children": [],
-      "description": "Accept PR content for every branch a submit creates, not just the target"
+      "description": "Accept PR content for every branch a submit creates, not just the target",
+      "commitContexts": {
+        "a626c23": [
+          {
+            "key": "pr-meta-existing-prs",
+            "text": "An existing PR is left untouched by --pr-meta. A PR that exists already has a description, and the only safe assumption is that someone meant it. submit runs on every push, so an overwriting payload replays the overwrite indefinitely, silently, on the branches furthest through review. Stale descriptions stay stale; rewriting one is a deliberate act for gh pr edit.",
+            "sources": [
+              {
+                "type": "file",
+                "reference": "internal/engine/submit.go"
+              }
+            ]
+          }
+        ]
+      }
     },
     "am/remove-bare-on-claude-call": {
       "parentBranchName": "am/aiprepare-diff-command",
