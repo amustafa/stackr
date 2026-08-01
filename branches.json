@@ -61,6 +61,10 @@
               "reference": "internal/engine/prepare.go"
             }
           ]
+        },
+        {
+          "key": "tradeoff",
+          "text": "Only the target branch takes --title/--body. One title describes one change, so propagating it to an ancestor would mislabel that ancestor's PR; ancestors are prompted separately, or reported as gaps when non-interactive"
         }
       ]
     },
