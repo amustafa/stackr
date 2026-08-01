@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/graph"
+	"github.com/amustafa/stackr/internal/store"
 )
 
 // buildGraph wires a trunk plus a parent->children map into a Graph.
@@ -209,5 +211,88 @@ func TestClassifyAgainstRemote(t *testing.T) {
 		}
 		checkInts("newBelow", gotBelow, tc.wantBelow)
 		checkInts("newAbove", gotAbove, tc.wantAbove)
+	}
+}
+
+// A segment can come to span two previously separate GitHub stacks — `sr move`,
+// `sr fold` and `sr reorder` all merge segments. Keeping only the first recorded
+// number would make ghAddToStack fail for every PR belonging to the other one,
+// and since nothing would then update, every later submit would fail identically.
+func TestMapSegment_CollectsEveryRecordedStack(t *testing.T) {
+	prInfo := &store.PRInfo{Branches: map[string]*store.BranchPR{
+		"a": {Number: 42, BaseBranch: "main", StackNumber: 0},
+		"b": {Number: 43, BaseBranch: "a", StackNumber: 7},
+		"c": {Number: 44, BaseBranch: "b", StackNumber: 9},
+	}}
+
+	seg := mapSegment(prInfo, []string{"a", "b", "c"})
+
+	if len(seg.recorded) != 2 || seg.recorded[0] != 7 || seg.recorded[1] != 9 {
+		t.Fatalf("recorded = %v, want both stacks [7 9] so the rebuild can dissolve each", seg.recorded)
+	}
+	if len(seg.prNumbers) != 3 {
+		t.Errorf("prNumbers = %v, want all three", seg.prNumbers)
+	}
+	if seg.baseByPR[43] != "a" {
+		t.Errorf("baseByPR[43] = %q, want the local graph's parent", seg.baseByPR[43])
+	}
+}
+
+func TestMapSegment_SkipsBranchesWithoutAPR(t *testing.T) {
+	prInfo := &store.PRInfo{Branches: map[string]*store.BranchPR{
+		"a": {Number: 42, StackNumber: 7},
+		"b": {Number: 0}, // pushed, no PR yet
+		"c": {Number: 44, StackNumber: 7},
+	}}
+
+	seg := mapSegment(prInfo, []string{"a", "b", "c"})
+
+	if len(seg.branches) != 2 || seg.branches[0] != "a" || seg.branches[1] != "c" {
+		t.Fatalf("branches = %v, want only those with a PR", seg.branches)
+	}
+	// One distinct stack, so this segment can still be extended rather than rebuilt.
+	if len(seg.recorded) != 1 || seg.recorded[0] != 7 {
+		t.Errorf("recorded = %v, want [7]", seg.recorded)
+	}
+}
+
+func TestMapSegment_NoRecordedStacksMeansCreateFresh(t *testing.T) {
+	prInfo := &store.PRInfo{Branches: map[string]*store.BranchPR{
+		"a": {Number: 42},
+		"b": {Number: 43},
+	}}
+
+	seg := mapSegment(prInfo, []string{"a", "b"})
+	if len(seg.recorded) != 0 {
+		t.Errorf("recorded = %v, want empty so reconcileStack creates rather than rebuilds", seg.recorded)
+	}
+}
+
+func TestSortedKeys_IsDeterministic(t *testing.T) {
+	got := sortedKeys(map[int]bool{9: true, 7: true, 12: true})
+	want := []int{7, 9, 12}
+	if len(got) != len(want) {
+		t.Fatalf("sortedKeys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("sortedKeys = %v, want %v", got, want)
+		}
+	}
+}
+
+// A stack that has already gone away is the state unstacking was trying to
+// reach, so rebuildStack must not treat it as a failure.
+func TestIsMissingStack(t *testing.T) {
+	cases := map[string]bool{
+		"gh api POST repos/x/y/stacks/7/unstack failed: HTTP 404: Not Found": true,
+		"gh api ... failed: 404":                            true,
+		"gh api ... failed: HTTP 422: Unprocessable Entity": false,
+		"gh api ... timed out after 30s":                    false,
+	}
+	for msg, want := range cases {
+		if got := isMissingStack(errors.New(msg)); got != want {
+			t.Errorf("isMissingStack(%q) = %v, want %v", msg, got, want)
+		}
 	}
 }
