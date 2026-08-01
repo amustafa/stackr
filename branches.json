@@ -4,7 +4,7 @@
     "gh-stacks-api": {
       "parentBranchName": "main",
       "parentBranchRevision": "aafbbc7be9c9940748096ee913def8eaf0be8f3f",
-      "branchRevision": "472a4394b308059e09811bcb99514641a3e108ed",
+      "branchRevision": "89f73a5c589aacd392b6d2e5f2a996af484446ac",
       "children": [
         "gh-stacks-display"
       ]
