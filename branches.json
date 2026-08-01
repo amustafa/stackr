@@ -51,6 +51,16 @@
               "reference": "internal/engine/submit.go"
             }
           ]
+        },
+        {
+          "key": "design",
+          "text": "PrepareAI derives its branch set from buildPushSet, the same function Submit uses, so the job described to an agent and the job performed cannot drift apart",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/prepare.go"
+            }
+          ]
         }
       ]
     },
