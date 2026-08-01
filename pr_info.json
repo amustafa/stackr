@@ -1,5 +1,13 @@
 {
   "branches": {
+    "am/aiprepare-diff-command": {
+      "number": 31,
+      "title": "submit --aiprepare: reference the diff by command instead of embedding it",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/31",
+      "baseBranch": "am/fix-move",
+      "stackNumber": 32
+    },
     "am/bugfix-submit-ai": {
       "number": 13,
       "title": "Anchor worktree paths on the main repo root (fix --sandbox crash) and embed AI prompts in --aiprepare",
@@ -12,7 +20,8 @@
       "title": "Move is a repoint plus a restack, with target validation and an interactive picker",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/30",
-      "baseBranch": "main"
+      "baseBranch": "main",
+      "stackNumber": 32
     },
     "am/pr21-followups": {
       "number": 25,
