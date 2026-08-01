@@ -40,7 +40,19 @@
       "parentBranchRevision": "205eb343fe42960097a1c05c263c3208cf169489",
       "branchRevision": "e87b718fa6e023a4236a6245226ce8233c643be9",
       "children": [],
-      "description": "submit creates a PR for every branch it pushes, and --aiprepare describes the whole job"
+      "description": "submit creates a PR for every branch it pushes, and --aiprepare describes the whole job",
+      "context": [
+        {
+          "key": "approach",
+          "text": "ensurePR loops over the whole pushed set rather than just current; buildPushSet already orders bottom-up so each base has a PR before its child is opened",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/submit.go"
+            }
+          ]
+        }
+      ]
     },
     "main": {
       "branchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
