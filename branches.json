@@ -4,7 +4,7 @@
     "am/aiprepare-diff-command": {
       "parentBranchName": "am/fix-move",
       "parentBranchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
-      "branchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
+      "branchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
       "children": [],
       "description": "sr submit --aiprepare references the diff by command instead of embedding it"
     },
