@@ -32,7 +32,11 @@ type AIPrepareDiffCommand struct {
 
 // AIPrepareResult holds all context an agent needs to craft a PR.
 type AIPrepareResult struct {
-	Prompt      string                `json:"prompt"`
+	// Prompt carries the system prompt in --aiprepare mode, where the caller is
+	// an agent already in session and the JSON is all it gets. The --ai path
+	// leaves it empty because the same text is passed as --append-system-prompt,
+	// so omitempty keeps an empty key out of the payload piped to that session.
+	Prompt      string                `json:"prompt,omitempty"`
 	Branch      string                `json:"branch"`
 	Parent      string                `json:"parent"`
 	Description string                `json:"description,omitempty"`

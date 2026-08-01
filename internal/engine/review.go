@@ -192,17 +192,15 @@ func reviewAI(c *context.Context, opts ReviewOpts) error {
 		goal += ". This is a dry-run — show what you would do but do not make changes, post replies, or resolve threads"
 	}
 
-	// No --bare — it reads credentials only from ANTHROPIC_API_KEY or an
-	// apiKeyHelper, never OAuth or the keychain, so it fails with "Not logged
-	// in" for anyone signed in via `claude /login`. See submitAI.
-	args := []string{
-		"-p", goal,
-		"--allowedTools", "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *),Bash(cat *)",
-		"--append-system-prompt", systemPrompt,
+	allowedTools := "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *),Bash(cat *)"
+	request := buildAIRequest(goal, data)
+
+	if c.Debug || opts.DryRun {
+		echoAIRequest("address-review", allowedTools, systemPrompt, request)
 	}
 
-	cmd := exec.Command("claude", args...)
-	cmd.Stdin = strings.NewReader(string(data))
+	cmd := exec.Command("claude", claudeAgentArgs(allowedTools, systemPrompt)...)
+	cmd.Stdin = strings.NewReader(request)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
