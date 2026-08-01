@@ -15,6 +15,8 @@ A frozen branch is never rebased and never pushed by an automatic operation. Whe
 
 Explicitly naming a frozen branch as the subject of an operation is **not** an automatic operation and is not blocked — `sr restack --branch <frozen>` and submitting while checked out on a frozen branch both work. Freezing withdraws a branch from operations that sweep over it, not from the user's direct instruction.
 
+That exemption covers a branch's **commits**, not its **position**. `sr restack --branch <frozen>` replays commits onto the parent the branch already has; the parent pointer is untouched. An operation whose subject is a frozen branch and whose effect is to *repoint* that pointer is blocked even when named explicitly, because the parent pointer is precisely what freezing pins. So `sr move --source <frozen>` is an error, while `sr restack --branch <frozen>` is not. Being the *target* of a move is never blocked.
+
 Freezing is an *intention*, not a *failure*, so it is always skipped and reported, never an error. This distinguishes it from `RestackOpts.SkipBlocked`, which governs genuine failures (dirty worktree, rebase conflict) and may legitimately halt when false.
 
 ## Alternatives considered
@@ -28,3 +30,4 @@ Freezing is an *intention*, not a *failure*, so it is always skipped and reporte
 - This changes `sr restack` and therefore `sr sync`, not only `sr submit` — any caller of `Restack` now honours the flag.
 - Submit's hole has one sharp edge: if a frozen branch has **never been pushed**, a dependent's PR base names a ref that does not exist on the remote, and PR creation against it fails. Submit must detect that case and report it against the frozen branch, rather than surfacing GitHub's error against the dependent.
 - Reporting matters more than before: an operation that silently treats one branch differently from its neighbours is indistinguishable from a bug, so both the frozen branch and the shape of its exclusion must be named in the output.
+- The commits/position split means any future operation must be classified before it can honour an explicit-naming exemption. The question to ask is whether the operation changes the branch's parent pointer, not whether it rewrites history — **Move** does both, and the pointer is what decides it.
