@@ -32,8 +32,20 @@
       "stackNumber": 32
     },
     "am/ghstack-reconcile": {
-      "state": "open",
-      "baseBranch": "am/submit-covers-every-branch"
+      "number": 36,
+      "title": "Reconcile GitHub stacks against GitHub's own grouping, not a local cache",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/36",
+      "baseBranch": "am/submit-covers-every-branch",
+      "stackNumber": 32
+    },
+    "am/pr-meta": {
+      "number": 37,
+      "title": "--pr-meta carries PR content for every branch a submit creates",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/37",
+      "baseBranch": "am/ghstack-reconcile",
+      "stackNumber": 32
     },
     "am/pr21-followups": {
       "number": 25,
