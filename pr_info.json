@@ -36,7 +36,10 @@
       "baseBranch": "main"
     },
     "am/remove-bare-on-claude-call": {
-      "state": "open",
+      "number": 34,
+      "title": "Drop --bare from spawned Claude sessions so subscription logins work",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/34",
       "baseBranch": "am/aiprepare-diff-command"
     },
     "am/restack-bugfix": {
