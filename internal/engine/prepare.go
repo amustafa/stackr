@@ -61,8 +61,9 @@ type AIPrepareResult struct {
 	// so omitempty keeps an empty key out of the payload piped to that session.
 	Prompt string `json:"prompt,omitempty"`
 
-	// Target is the branch the user invoked submit on. It is the one branch
-	// --title/--body would apply to, and usually the one they care most about.
+	// Target is the branch the user invoked submit on — usually the one they
+	// care most about, and the branch a --pr-meta entry binds to when it names
+	// none and there is no single PR to be created.
 	Target string `json:"target"`
 
 	// Branches covers the whole job, ordered bottom-up so a branch's parent
@@ -200,11 +201,16 @@ func BuildAISystemPrompt() string {
 	b.WriteString("3. For each such branch, generate a concise title (no prefix like 'feat:' unless the project uses conventional commits) and a body in markdown. If a prTemplate is provided, fill it in. Otherwise use:\n")
 	b.WriteString("   ## Summary\n   <what changed and why>\n\n   ## Changes\n   <bulleted list>\n\n   ## Test Plan\n   <how to verify>\n\n")
 	b.WriteString("   Describe the change in prose. Do NOT paste raw diffs or `git --stat` output into the body — keep it focused on what changed and why.\n\n")
-	b.WriteString("4. Create each PR by checking the branch out and submitting it:\n")
-	b.WriteString("   sr checkout <branch>\n")
-	b.WriteString("   sr submit --title '<title>' --body-file /tmp/pr-<branch>.md\n\n")
-	b.WriteString("   Write each body to its own temp file — bodies are long and quoting them inline breaks on backticks and newlines.\n\n")
-	b.WriteString("5. Where a branch already has a PR, leave it alone unless its title or body is clearly wrong for what the branch now contains.\n")
-	b.WriteString("6. Return to the target branch with `sr checkout <target>` when you are done, then stop. Do not run any other commands.\n")
+	b.WriteString("4. Write each body to its own file, /tmp/pr-<branch>.md. Bodies are long, and quoting one into a shell argument breaks on backticks and newlines.\n")
+	b.WriteString("5. Write /tmp/pr-meta.json: a JSON array with one entry per branch you are giving a PR, bottom-up, in the order `branches` gives you.\n")
+	b.WriteString("   [\n")
+	b.WriteString("     {\"branch\": \"<branch>\", \"title\": \"<title>\", \"bodyFile\": \"/tmp/pr-<branch>.md\"}\n")
+	b.WriteString("   ]\n\n")
+	b.WriteString("   Every entry needs its own \"branch\". Add \"draft\": true to an entry to open that one as a draft.\n\n")
+	b.WriteString("6. Create them all with a single command, from the branch you are already on:\n")
+	b.WriteString("   sr submit --pr-meta /tmp/pr-meta.json\n\n")
+	b.WriteString("   Do NOT check branches out one at a time. That submit acts on exactly the branches listed in `branches` and creates their PRs bottom-up, and it validates the whole file before creating anything — so a mistake costs you a message rather than a half-built stack.\n\n")
+	b.WriteString("7. Leave branches that already have a PR out of the file entirely. `submit` will not overwrite an existing PR's title or body, and `existingPR` does not carry the body, so you have no basis to judge whether it should change. Rewriting one is a deliberate act for a human with `gh pr edit`.\n")
+	b.WriteString("8. Stop when the submit reports the PRs. Do not run any other commands.\n")
 	return b.String()
 }

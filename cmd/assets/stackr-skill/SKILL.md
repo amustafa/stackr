@@ -82,12 +82,25 @@ or the graph desyncs.
   prompts.
 
       sr submit --aiprepare                    # PR context as JSON
-      sr submit --title "..." --body-file /tmp/pr.md
+      sr submit --pr-meta /tmp/prs.json        # create every branch's PR at once
       sr address-review --aiprepare            # all unresolved comments as JSON
 
   `sr submit --aiprepare` leaves the diff out on purpose — it hands you a
   `diffCommand` to run yourself, so you only spend context on the patch when the
   description, commits and context entries aren't enough to describe the change.
+
+  A submit acts on the current branch **and its downstack ancestors**, so
+  `--aiprepare` describes all of them and `--pr-meta` writes all of them back.
+  Do not check branches out one at a time: one submit creates them bottom-up,
+  and it validates the whole payload before creating anything.
+
+      [
+        { "branch": "feat/api", "title": "...", "bodyFile": "/tmp/pr-api.md" },
+        { "branch": "feat/ui",  "title": "...", "bodyFile": "/tmp/pr-ui.md", "draft": true }
+      ]
+
+  Bodies go in files — they are long and break on backticks when quoted inline.
+  `"branch"` may be left out only when the submit creates a single PR.
 
 - **Interactive**: bare `sr submit` / `sr address-review` runs a wizard.
 - **AI-driven**: `--ai` hands the whole task to a fresh Claude session.

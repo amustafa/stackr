@@ -36,6 +36,12 @@ type SubmitOpts struct {
 	BodyFile   string // Read PR body from file instead of --body
 	AI         bool   // Spawn Claude session to own the submit flow
 	AIPrepare  bool   // Output JSON context and exit (no push, no PR)
+
+	// PRMeta holds the raw --pr-meta values: JSON blobs, or paths to files of
+	// JSON, each carrying one branch's PR content. A submit creates a PR for
+	// every branch it pushes, so PR content has to be addressable per branch;
+	// --title/--body can only ever describe one of them.
+	PRMeta []string
 }
 
 // Submit pushes branches to the remote and manages PRs.
@@ -57,6 +63,17 @@ func Submit(c *context.Context, opts SubmitOpts) error {
 			return fmt.Errorf("could not read body file: %w", err)
 		}
 		opts.Body = string(data)
+	}
+
+	// --title/--body is the one-branch shorthand for --pr-meta, and is folded
+	// into it here so there is a single path from here on. The two are mutually
+	// exclusive at the flag layer, so only one of them ever contributes.
+	prMeta, err := ParsePRMeta(opts.PRMeta)
+	if err != nil {
+		return err
+	}
+	if opts.Title != "" {
+		prMeta = append(prMeta, PRMeta{Title: opts.Title, Body: opts.Body})
 	}
 
 	if err := ghCheckInstalled(); err != nil {
@@ -96,6 +113,12 @@ func Submit(c *context.Context, opts SubmitOpts) error {
 		return nil
 	}
 
+	// Catch a misspelt branch name here, while nothing has been pushed. The rest
+	// of the --pr-meta validation needs the PR survey and runs after the push.
+	if err := CheckPRMetaBranches(prMeta, set); err != nil {
+		return err
+	}
+
 	if opts.DryRun {
 		return dryRunReport(c, cfg, set)
 	}
@@ -119,7 +142,7 @@ func Submit(c *context.Context, opts SubmitOpts) error {
 		return err
 	}
 
-	return reconcilePhase(c, opts, cfg, prInfo, current, pushed)
+	return reconcilePhase(c, opts, cfg, prInfo, current, pushed, prMeta)
 }
 
 // reportDropped names every branch left out of this submit. An operation that
@@ -268,7 +291,7 @@ func joinOrNone(names []string) string {
 // Bottom-up push order guarantees a parent already exists on the remote before
 // its child's base is retargeted.
 func reconcilePhase(c *context.Context, opts SubmitOpts, cfg *store.Config,
-	prInfo *store.PRInfo, current string, pushed []string) error {
+	prInfo *store.PRInfo, current string, pushed []string, prMeta []PRMeta) error {
 
 	g, err := c.Store.ReadGraph()
 	if err != nil {
@@ -315,8 +338,22 @@ func reconcilePhase(c *context.Context, opts SubmitOpts, cfg *store.Config,
 	//
 	// pushed is bottom-up (see buildPushSet), so each base already has its PR by
 	// the time its child is created.
+	eligible, existing, needPR, err := surveyPRs(g, pushed)
+	if err != nil {
+		return err
+	}
+
+	// Bind before creating anything. A --pr-meta payload naming a branch this
+	// submit does not touch, or leaving a branch ambiguous, is a mistake in the
+	// whole job — reporting it after two of five PRs already exist leaves a
+	// half-built stack to unpick by hand.
+	content, err := bindPRMeta(prMeta, eligible, needPR, current)
+	if err != nil {
+		return err
+	}
+
 	for _, name := range pushed {
-		if err := ensurePR(c, opts, g, prInfo, name, name == current); err != nil {
+		if err := ensurePR(c, opts, g, prInfo, name, existing[name], content[name]); err != nil {
 			return err
 		}
 	}
@@ -330,25 +367,55 @@ func reconcilePhase(c *context.Context, opts SubmitOpts, cfg *store.Config,
 	return nil
 }
 
-// ensurePR creates a pull request for the branch being submitted if it does not
-// already have one.
+// surveyPRs asks GitHub, once, which of the pushed branches already have a pull
+// request.
+//
+// Hoisted out of ensurePR so the answer is known before the first PR is created.
+// bindPRMeta needs the full list of branches still needing one to decide whether
+// a branchless --pr-meta entry is unambiguous, and that question has to be
+// settled before any of those PRs exist to change the answer.
+//
+// eligible is every pushed branch that could carry a PR (trunk and branches the
+// graph does not know about cannot). needPR is the subset with none yet, in the
+// same bottom-up order as pushed.
+func surveyPRs(g *graph.Graph, pushed []string) (eligible []string, existing map[string]*PRResult, needPR []string, err error) {
+	existing = make(map[string]*PRResult, len(pushed))
+
+	for _, name := range pushed {
+		b := g.Branches[name]
+		if b == nil || b.IsTrunk {
+			continue
+		}
+		eligible = append(eligible, name)
+
+		pr, err := ghPRForBranch(name)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to check PR status for %s: %w", name, err)
+		}
+		if pr != nil {
+			existing[name] = pr
+			continue
+		}
+		needPR = append(needPR, name)
+	}
+
+	return eligible, existing, needPR, nil
+}
+
 // ensurePR makes sure branch has a PR, creating one if it does not.
 //
-// isTarget marks the branch the user actually invoked submit on. Only that
-// branch takes --title/--body: the user wrote one title and it describes one
-// change, so applying it to an ancestor would label that ancestor's PR with the
-// wrong summary. Ancestors are prompted for separately, or reported as gaps
-// when there is nobody to prompt.
-func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store.PRInfo, branch string, isTarget bool) error {
+// meta is this branch's --pr-meta entry, or nil if the user supplied none for
+// it. Content is addressed per branch rather than applied to whichever branch
+// submit was invoked on: a submit creates a PR for every branch it pushes, and
+// one title cannot describe several changes.
+func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store.PRInfo,
+	branch string, existing *PRResult, meta *PRMeta) error {
+
 	b := g.Branches[branch]
 	if b == nil || b.IsTrunk {
 		return nil
 	}
 
-	existing, err := ghPRForBranch(branch)
-	if err != nil {
-		return fmt.Errorf("failed to check PR status: %w", err)
-	}
 	if existing != nil {
 		if prInfo.Branches[branch] == nil {
 			prInfo.Branches[branch] = &store.BranchPR{}
@@ -362,21 +429,20 @@ func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store
 		if !c.Quiet {
 			fmt.Printf("PR #%d for %s (%s)\n", existing.Number, branch, existing.URL)
 		}
-		return nil
+		return applyPRMetaToExisting(c, branch, existing, meta)
 	}
 
 	var title, body string
-	if isTarget {
-		title, body = opts.Title, opts.Body
+	if meta != nil {
+		title, body = meta.Title, meta.Body
 	}
 
 	if title == "" {
 		if !c.Interactive {
 			if !c.Quiet {
 				fmt.Printf("No PR for %s and nothing to build one from — pushed without creating a PR.\n", branch)
-				if !isTarget {
-					fmt.Printf("  %s is a base for the branches above it; without a PR the stack has a gap there.\n", branch)
-				}
+				fmt.Printf("  Without one the stack has a gap here: the PRs above %s open against a ref nobody reviews.\n", branch)
+				fmt.Printf("  Pass content for it with --pr-meta '{\"branch\":%q,\"title\":\"...\",\"bodyFile\":\"...\"}'.\n", branch)
 			}
 			return nil
 		}
@@ -415,20 +481,46 @@ func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store
 		}
 	}
 
+	draft := meta.DraftFor(opts.Draft)
 	result, err := ghCreatePR(GHCreateOpts{
 		Base:  b.ParentBranchName,
 		Head:  branch,
 		Title: title,
 		Body:  body,
-		Draft: opts.Draft,
+		Draft: draft,
 	})
 	if err != nil {
 		return err
 	}
-	storePRResult(prInfo, branch, b.ParentBranchName, result, opts.Draft)
+	storePRResult(prInfo, branch, b.ParentBranchName, result, draft)
 	if !c.Quiet {
 		fmt.Printf("Created PR #%d: %s\n", result.Number, result.URL)
 	}
+	return nil
+}
+
+// applyPRMetaToExisting handles a --pr-meta entry naming a branch whose pull
+// request already exists.
+//
+// The policy is to leave the pull request alone. A PR that exists already has a
+// description, and the only safe assumption about it is that someone meant what
+// it says — a reviewer's checklist, an edit made in the web UI, a summary
+// rewritten after discussion. `sr submit` runs on every push, so a payload that
+// overwrote would replay that overwrite for as long as the file sits on disk;
+// the damage is silent, repeated, and lands on exactly the branches furthest
+// through review.
+//
+// The cost is that a genuinely stale description stays stale, and that is
+// accepted: rewriting a PR body is a deliberate act, and `gh pr edit` is already
+// the tool for it. Nothing here is silent — a submit that swallowed content the
+// user typed would be the same failure in the other direction.
+func applyPRMetaToExisting(c *context.Context, branch string, existing *PRResult, meta *PRMeta) error {
+	if meta == nil || c.Quiet {
+		return nil
+	}
+
+	fmt.Printf("  Kept the existing title and body — the --pr-meta entry for %s was not applied.\n", branch)
+	fmt.Printf("  To replace them deliberately: gh pr edit %d --title '...' --body-file ...\n", existing.Number)
 	return nil
 }
 
@@ -472,7 +564,9 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 		goal += ". Mark the PR as a draft (add --draft flag)"
 	}
 
-	allowedTools := "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *)"
+	// Write, not just Edit: the flow asks the session to create a body file per
+	// branch plus the --pr-meta payload, and Edit cannot create a new file.
+	allowedTools := "Read,Edit,Write,Bash(sr *),Bash(git *),Bash(gh *)"
 	request := buildAIRequest(goal, data)
 
 	if c.Debug || opts.DryRun {
