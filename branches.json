@@ -2,42 +2,17 @@
   "version": 1,
   "branches": {
     "am/fix-move": {
-      "parentBranchName": "submit-preflight",
+      "parentBranchName": "main",
       "parentBranchRevision": "6ed0085310d44d56e62915aa8f5b117cb059db08",
       "branchRevision": "6eb582a786ba7b1eba383b8f44ee33df53b551d6",
       "children": []
     },
-    "gh-stacks-api": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "aafbbc7be9c9940748096ee913def8eaf0be8f3f",
-      "branchRevision": "4f7b54651497e1a3c17b8ce837052ea19275731b",
-      "children": [
-        "gh-stacks-display"
-      ]
-    },
-    "gh-stacks-display": {
-      "parentBranchName": "gh-stacks-api",
-      "parentBranchRevision": "4f7b54651497e1a3c17b8ce837052ea19275731b",
-      "branchRevision": "bea9827de111da639860d804dd180f3fe1d2b742",
-      "children": [
-        "submit-preflight"
-      ]
-    },
     "main": {
-      "branchRevision": "aafbbc7be9c9940748096ee913def8eaf0be8f3f",
-      "children": [
-        "gh-stacks-api"
-      ],
-      "isTrunk": true
-    },
-    "submit-preflight": {
-      "parentBranchName": "gh-stacks-display",
-      "parentBranchRevision": "bea9827de111da639860d804dd180f3fe1d2b742",
-      "branchRevision": "6ed0085310d44d56e62915aa8f5b117cb059db08",
+      "branchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
       "children": [
         "am/fix-move"
       ],
-      "description": "sr submit preflight: settle content divergence before pushing"
+      "isTrunk": true
     }
   }
 }
