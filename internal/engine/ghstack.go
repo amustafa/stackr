@@ -63,13 +63,14 @@ func (s *GHStack) prNumbers() []int {
 //
 // gh expands the {owner}/{repo} placeholders from the current repository, so
 // stackr never has to resolve the remote itself.
-func ghStackAPI(method, path string, body any) ([]byte, error) {
+func ghStackAPI(method, path string, body any, extra ...string) ([]byte, error) {
 	args := []string{"api",
 		"--method", method,
 		path,
 		"-H", "Accept: application/vnd.github+json",
 		"-H", "X-GitHub-Api-Version: " + ghStackAPIVersion,
 	}
+	args = append(args, extra...)
 
 	var stdin bytes.Buffer
 	if body != nil {
@@ -119,22 +120,62 @@ func ghCreateStack(prNumbers []int) (*GHStack, error) {
 	return &s, nil
 }
 
-// ghGetStack reads a stack by its stack number.
-// Returns nil, nil when the stack no longer exists.
-func ghGetStack(number int) (*GHStack, error) {
-	out, err := ghStackAPI("GET", fmt.Sprintf("repos/{owner}/{repo}/stacks/%d", number), nil)
+// ghListStacks returns every stack in the repository.
+//
+// GitHub is the only authority on which stack a pull request belongs to. The
+// StackNumber recorded in pr_info.json is a cache, and it can be wrong in every
+// direction: lost (a failed reconcile used to zero it), stale (someone regrouped
+// in the web UI), or simply absent (a fresh clone, or a stack a teammate made).
+// Reconciling against the cache rather than against GitHub is what made a single
+// transient failure unrecoverable — with no recorded number the next submit
+// takes the "create a fresh stack" path, and GitHub answers 422 "already part of
+// a stack" for as long as the real grouping survives, which is forever.
+//
+// --paginate because a repository accumulates a stack per merged series and the
+// endpoint is paged. A missed page reads exactly like "this PR is in no stack",
+// which is the failure this function exists to remove.
+func ghListStacks() ([]GHStack, error) {
+	out, err := ghStackAPI("GET", "repos/{owner}/{repo}/stacks", nil, "--paginate")
 	if err != nil {
-		// A dissolved or merged-away stack is an expected state, not a failure.
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "Not Found") {
-			return nil, nil
-		}
 		return nil, err
 	}
-	var s GHStack
-	if err := json.Unmarshal(out, &s); err != nil {
-		return nil, fmt.Errorf("failed to parse stack response: %w", err)
+	var stacks []GHStack
+	if err := json.Unmarshal(out, &stacks); err != nil {
+		return nil, fmt.Errorf("failed to parse stack list: %w", err)
 	}
-	return &s, nil
+	return stacks, nil
+}
+
+// stacksContaining narrows the repository's stacks to those holding at least one
+// of our pull requests — the only ones that can stand between this segment and
+// the grouping it wants. Ordered by stack number so unstacks happen in a
+// deterministic order and warnings read the same way twice.
+func stacksContaining(all []GHStack, prNumbers []int) []GHStack {
+	want := make(map[int]bool, len(prNumbers))
+	for _, n := range prNumbers {
+		want[n] = true
+	}
+
+	var out []GHStack
+	for _, s := range all {
+		for _, pr := range s.PullRequests {
+			if want[pr.Number] {
+				out = append(out, s)
+				break
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
+	return out
+}
+
+// stackNumbersOf lists the numbers of a set of stacks, in the order given.
+func stackNumbersOf(groups []GHStack) []int {
+	out := make([]int, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, g.Number)
+	}
+	return out
 }
 
 // ghAddToStack appends PRs above the current top of an existing stack.
@@ -244,38 +285,80 @@ func linearSegments(g *graph.Graph, submitted []string) [][]string {
 // enabled, an offline machine, or an older gh must not turn a successful submit
 // into a failure. Problems are reported, not fatal.
 func syncGitHubStacks(g *graph.Graph, prInfo *store.PRInfo, submitted []string, quiet, interactive bool) {
-	for _, segment := range linearSegments(g, submitted) {
+	segments := linearSegments(g, submitted)
+	if len(segments) == 0 {
+		return
+	}
+
+	// One listing for the whole submit, since every segment reconciles against
+	// the same repository-wide picture. Failing to read it is not the same as
+	// finding nothing: without the listing we cannot tell an ungrouped PR from
+	// one already in a stack, and guessing "ungrouped" is precisely what makes
+	// ghCreateStack fail with 422. Say so and leave the recorded numbers alone.
+	all, err := ghListStacks()
+	if err != nil {
+		fmt.Printf("Warning: could not read GitHub stacks (%v) — stack grouping was left unchanged.\n", err)
+		return
+	}
+
+	for _, segment := range segments {
 		seg := mapSegment(prInfo, segment)
 
 		if len(seg.prNumbers) < minStackSize {
 			continue
 		}
 
-		// Clear the recorded numbers before reconciling: reconcileStack may
-		// dissolve the group, and a failure between the unstack and the create
-		// must leave the PRs merely ungrouped rather than pointing at a stack
-		// number that no longer exists.
-		for _, name := range seg.branches {
-			prInfo.Branches[name].StackNumber = 0
+		sync, err := reconcileStack(seg.prNumbers, seg.baseByPR, all, interactive)
+
+		// Record what was taken apart before looking at the error. A dissolved
+		// grouping is gone whether or not the rest of the reconcile succeeded, so
+		// keeping its number would leave these branches pointing at a stack they
+		// are no longer in — and dropping it when nothing was dissolved would
+		// throw away the only local trace of a stack that still exists.
+		if len(sync.Dissolved) > 0 {
+			for _, name := range seg.branches {
+				prInfo.Branches[name].StackNumber = 0
+			}
+			all = withoutStacks(all, sync.Dissolved)
 		}
 
-		stack, err := reconcileStack(seg.recorded, seg.prNumbers, seg.baseByPR, interactive)
 		if err != nil {
 			fmt.Printf("Warning: could not sync GitHub stack for %s: %v\n",
 				strings.Join(seg.branches, " -> "), err)
 			continue
 		}
-		if stack == nil {
+		if sync.Stack == nil {
 			continue
 		}
 
 		for _, name := range seg.branches {
-			prInfo.Branches[name].StackNumber = stack.Number
+			prInfo.Branches[name].StackNumber = sync.Stack.Number
 		}
 		if !quiet {
-			fmt.Printf("GitHub stack #%d: %s\n", stack.Number, strings.Join(seg.branches, " -> "))
+			fmt.Printf("GitHub stack #%d: %s\n", sync.Stack.Number, strings.Join(seg.branches, " -> "))
 		}
 	}
+}
+
+// withoutStacks drops dissolved stacks from the cached listing.
+//
+// The listing is read once per submit, but a fork produces several segments and
+// two of them can be covered by one remote stack — dissolving it for the first
+// segment would otherwise leave the second reconciling against a group that no
+// longer exists, and treating a live PR as already-taken.
+func withoutStacks(all []GHStack, numbers []int) []GHStack {
+	gone := make(map[int]bool, len(numbers))
+	for _, n := range numbers {
+		gone[n] = true
+	}
+
+	out := all[:0:0]
+	for _, s := range all {
+		if !gone[s.Number] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // segmentPRs is one linear segment resolved against the recorded PR metadata.
@@ -283,21 +366,19 @@ type segmentPRs struct {
 	branches  []string       // branches that have a PR, bottom-up
 	prNumbers []int          // their PR numbers, same order
 	baseByPR  map[int]string // PR number -> the base branch the local graph wants
-	recorded  []int          // every stack these PRs are already registered against
 }
 
 // mapSegment resolves a segment's branches to pull requests, dropping any branch
 // that was pushed but has no PR yet — a stack can only contain pull requests.
 //
-// recorded collects EVERY distinct stack number, not just the first one found.
-// Local reshaping (`sr move`, `sr fold`, `sr reorder`) can merge two previously
-// separate segments into one, and GitHub allows a PR in only one stack — so a
-// segment spanning two recorded stacks has to dissolve both before it can be
-// regrouped. Keeping only the first would make every subsequent submit fail the
-// same way, with no path back to a consistent state.
+// Deliberately no StackNumber here. Which stack a PR belongs to is read back
+// from GitHub (ghListStacks) rather than taken from this file: the recorded
+// number is a cache that goes stale whenever anyone regroups on the remote, and
+// treating it as the truth is what let one failed reconcile wedge the
+// integration permanently. StackNumber is now written by the sync and read only
+// for display (`sr info`, `sr log`).
 func mapSegment(prInfo *store.PRInfo, segment []string) segmentPRs {
 	seg := segmentPRs{baseByPR: map[int]string{}}
-	recorded := map[int]bool{}
 
 	for _, name := range segment {
 		pr := prInfo.Branches[name]
@@ -307,13 +388,46 @@ func mapSegment(prInfo *store.PRInfo, segment []string) segmentPRs {
 		seg.prNumbers = append(seg.prNumbers, pr.Number)
 		seg.branches = append(seg.branches, name)
 		seg.baseByPR[pr.Number] = pr.BaseBranch
-		if pr.StackNumber != 0 {
-			recorded[pr.StackNumber] = true
-		}
 	}
 
-	seg.recorded = sortedKeys(recorded)
 	return seg
+}
+
+// stackSync is the outcome of reconciling one segment.
+//
+// Dissolved names the stacks actually taken apart, and is reported alongside the
+// error rather than instead of it, because the caller has to record different
+// things in the two failure modes. A create or an /add that never dissolved
+// anything leaves the remote grouping exactly as it was, so the recorded stack
+// numbers are still true and must be kept. A failure after an unstack leaves the
+// pull requests genuinely ungrouped, so keeping the number would point them at a
+// stack they are no longer in.
+//
+// Clearing unconditionally is what wedged this integration before: one failed
+// /add erased the only local record of the stack, so every later submit took the
+// "create fresh" path and GitHub answered 422 forever.
+type stackSync struct {
+	Stack     *GHStack
+	Dissolved []int
+}
+
+// unstackAll dissolves each stack, reporting which ones actually came apart.
+//
+// A stack that has already gone away is not an error: absent is exactly the
+// state unstacking was meant to reach, and it is not counted as dissolved
+// because nothing changed.
+func unstackAll(numbers []int) ([]int, error) {
+	var dissolved []int
+	for _, n := range numbers {
+		if err := ghUnstack(n); err != nil {
+			if isMissingStack(err) {
+				continue
+			}
+			return dissolved, fmt.Errorf("could not unstack #%d: %w", n, err)
+		}
+		dissolved = append(dissolved, n)
+	}
+	return dissolved, nil
 }
 
 // rebuildStack regroups a segment from scratch: dissolve every stack its pull
@@ -325,17 +439,10 @@ func mapSegment(prInfo *store.PRInfo, segment []string) segmentPRs {
 // explicit unstack removes them. Creating without dissolving is therefore
 // rejected for any PR GitHub still considers grouped, which is the shape of
 // every failure this path exists to recover from.
-//
-// A stack that has already gone away is not an error: absent is exactly the
-// state unstacking was meant to reach.
-func rebuildStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*GHStack, error) {
-	for _, n := range recorded {
-		if err := ghUnstack(n); err != nil {
-			if isMissingStack(err) {
-				continue
-			}
-			return nil, fmt.Errorf("could not unstack #%d before rebuilding: %w", n, err)
-		}
+func rebuildStack(dissolve []int, prNumbers []int, baseByPR map[int]string) (stackSync, error) {
+	dissolved, err := unstackAll(dissolve)
+	if err != nil {
+		return stackSync{Dissolved: dissolved}, fmt.Errorf("%w (before rebuilding the stack)", err)
 	}
 
 	// ghCreateStack validates that each PR's base ref equals the previous PR's
@@ -345,24 +452,14 @@ func rebuildStack(recorded []int, prNumbers []int, baseByPR map[int]string) (*GH
 	// fails right back with the same chain-validation error.
 	retargetBases(prNumbers, baseByPR)
 
-	return ghCreateStack(prNumbers)
+	s, err := ghCreateStack(prNumbers)
+	return stackSync{Stack: s, Dissolved: dissolved}, err
 }
 
 // isMissingStack reports whether an error means the stack is already gone.
 func isMissingStack(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "404") || strings.Contains(msg, "Not Found")
-}
-
-// sortedKeys returns a set's members in ascending order, so stacks are
-// dissolved in a deterministic order and warnings read the same way twice.
-func sortedKeys(set map[int]bool) []int {
-	out := make([]int, 0, len(set))
-	for n := range set {
-		out = append(out, n)
-	}
-	sort.Ints(out)
-	return out
 }
 
 // stackNeedsRebuild reports whether a recorded stack can no longer be extended,
@@ -440,117 +537,148 @@ func anyPROpen(prNumbers []int) (bool, error) {
 	return false, nil
 }
 
-// reconcileStack brings one segment's stack on GitHub in line with the local
-// PR chain: creating it, extending it, or leaving it alone if it already
-// matches. Returns nil when there is nothing to record.
+// chooseAnchor decides which existing stack this segment should grow into, and
+// which stacks have to be dissolved to get there.
 //
-// recorded holds every stack number the segment's PRs are currently registered
-// against. Normally that is zero or one, but local reshaping can merge two
-// previously separate segments, and GitHub allows a PR in only one stack — so
-// more than one means the group has to be rebuilt from scratch rather than
-// extended.
+// A stack is an eligible anchor when it is still live (open, non-empty) and its
+// members appear inside our segment as a contiguous run in the same order. That
+// is the only shape GitHub's /add endpoint can extend: it appends above the
+// current top and cannot splice into the middle or below the bottom.
 //
-// baseByPR maps each PR number to the base branch it should have, per the
-// local graph — used only to re-sync base refs when a stack is rebuilt.
-func reconcileStack(recorded []int, prNumbers []int, baseByPR map[int]string, interactive bool) (*GHStack, error) {
-	if len(recorded) == 0 {
-		return ghCreateStack(prNumbers)
-	}
+// Among eligible stacks the LOWEST run wins. Anchoring as far down the segment
+// as possible leaves the most PRs to append and the fewest to dissolve, and it
+// keeps the stack number stable for the branches at the bottom — the ones most
+// likely to be under review already, and so the ones whose stack link is most
+// expensive to churn.
+//
+// Every other stack holding one of our PRs goes in dissolve. GitHub allows a
+// pull request in only one stack, so a rival grouping over part of our segment
+// cannot be merged into the anchor; it has to go away first. That is the
+// a-b-c-d-e case where the remote holds {a,b} and {d,e}: {a,b} anchors, {d,e}
+// dissolves, and c, d, e are then appended to {a,b}.
+func chooseAnchor(prNumbers []int, groups []GHStack) (anchor *GHStack, start int, dissolve []int) {
+	best := -1
+	bestStart := 0
 
-	// A segment spanning several recorded stacks cannot be extended into any one
-	// of them: /add would be rejected for every PR that belongs to another.
-	if len(recorded) > 1 {
-		return rebuildStack(recorded, prNumbers, baseByPR)
-	}
-
-	existing := recorded[0]
-	remote, err := ghGetStack(existing)
-	if err != nil {
-		return nil, err
-	}
-
-	if stackNeedsRebuild(remote) {
-		// Rebuild, not create. A closed stack keeps its members — only an
-		// explicit unstack dissolves one — so creating straight away would be
-		// rejected for PRs GitHub still considers grouped. rebuildStack
-		// tolerates a stack that has genuinely gone away.
-		return rebuildStack(recorded, prNumbers, baseByPR)
-	}
-
-	newBelow, newAbove, found := classifyAgainstRemote(prNumbers, remote.prNumbers())
-	if !found {
-		// The remote stack's top is not in our segment at all: the two have
-		// genuinely diverged, not merely fallen behind. See resolveDivergedStack.
-		return resolveDivergedStack(recorded, remote, prNumbers, baseByPR, interactive)
-	}
-
-	if len(newBelow) > 0 {
-		// GitHub's stacks API can only extend a stack upward — ghAddToStack
-		// appends above the current top, there is no way to attach a PR below
-		// the existing base. That's fine when newBelow is only PRs GitHub
-		// already dropped for merging (the common case), but if any of them
-		// are still open, a PR has genuinely been inserted below the stack's
-		// current bottom (e.g. `sr restack` onto a new base branch), and the
-		// only way to reflect that on GitHub is to rebuild the stack outright.
-		open, err := anyPROpen(newBelow)
-		if err != nil {
-			return nil, err
+	for i := range groups {
+		g := &groups[i]
+		if stackNeedsRebuild(g) {
+			continue
 		}
-		if open {
-			// GitHub refuses to create a stack containing a PR that's already a
-			// member of another one, so the old grouping has to be dissolved
-			// first. Not atomic: if the create fails after the unstack succeeds,
-			// the PRs are left ungrouped — the same known gap noted on
-			// resolveDivergedStack, not one this path introduces.
-			return rebuildStack(recorded, prNumbers, baseByPR)
+		below, _, found := classifyAgainstRemote(prNumbers, g.prNumbers())
+		if !found {
+			continue
+		}
+		if best == -1 || len(below) < bestStart {
+			best, bestStart = i, len(below)
 		}
 	}
 
-	if len(newAbove) == 0 {
-		return remote, nil
+	for i := range groups {
+		if i != best {
+			dissolve = append(dissolve, groups[i].Number)
+		}
 	}
-	return ghAddToStack(existing, newAbove)
+	if best == -1 {
+		return nil, 0, dissolve
+	}
+	return &groups[best], bestStart, dissolve
 }
 
-// resolveDivergedStack decides what to do when the stack recorded on GitHub no
-// longer lines up with the local segment — its top PR is not in our chain at
-// all, so there is nothing to simply append to.
+// reconcileStack brings one segment's grouping on GitHub in line with the local
+// PR chain, given the repository's current stacks.
 //
-// This happens for good reasons and bad ones:
-//   - `sr reorder` / `sr move` / `sr fold` reshaped the local stack, so the
-//     segment now covers a different set of PRs than when it was registered.
-//   - Someone regrouped the PRs by hand in the web UI or with `gh stack`.
-//   - A PR mid-stack was closed rather than merged.
+// Four outcomes, matching the four shapes the remote can be in:
 //
-// The trade-off is whose view wins. Rebuilding (ghUnstack + ghCreateStack)
-// makes GitHub mirror the local graph, which is the whole point of the
-// integration — but it silently discards any deliberate grouping someone made
-// on the remote. Leaving it alone (return remote, nil, after a warning) never
-// destroys remote intent, but lets GitHub drift from local indefinitely with
-// only a warning that is easy to miss in a long submit.
+//   - No stack holds any of our PRs — create one.
+//   - A stack holds exactly this segment — adopt it. Nothing changes on GitHub;
+//     we just record the number we had lost.
+//   - A stack holds a lower run of the segment — append the rest above it,
+//     dissolving any rival grouping over the PRs being appended.
+//   - Nothing eligible to extend — rebuild the group from scratch.
 //
-// The policy is to REBUILD, because stackr treats the local graph as the source
-// of truth everywhere else (see restack.go), and a stacking tool whose remote
-// grouping silently disagrees with its local graph is worse than one that is
-// occasionally opinionated.
-//
-// Two guards make that safe enough. The caller clears the recorded stack number
-// BEFORE we unstack, so a failure between unstack and create leaves the PRs
-// merely ungrouped — recoverable on the next submit — rather than pointing at a
-// stack number that no longer exists. And the rebuild only happens when a human
-// is present: an unattended submit warns and leaves the remote alone rather than
-// regrouping someone else's PRs.
-func resolveDivergedStack(recorded []int, remote *GHStack, prNumbers []int,
-	baseByPR map[int]string, interactive bool) (*GHStack, error) {
-
-	if !interactive {
-		fmt.Printf("Warning: local stack %v has diverged from GitHub stack #%d %v — "+
-			"leaving the GitHub grouping alone. Re-run interactively to rebuild it.\n",
-			prNumbers, remote.Number, remote.prNumbers())
-		return remote, nil
+// baseByPR maps each PR number to the base branch the local graph wants, used to
+// re-point PRs that a dissolve has just freed.
+func reconcileStack(prNumbers []int, baseByPR map[int]string, all []GHStack, interactive bool) (stackSync, error) {
+	groups := stacksContaining(all, prNumbers)
+	if len(groups) == 0 {
+		s, err := ghCreateStack(prNumbers)
+		return stackSync{Stack: s}, err
 	}
 
-	return rebuildStack(recorded, prNumbers, baseByPR)
+	anchor, start, dissolve := chooseAnchor(prNumbers, groups)
+	diverged := anchor == nil
+
+	if anchor != nil {
+		below := prNumbers[:start]
+		above := prNumbers[start+len(anchor.PullRequests):]
+
+		// PRs below the anchor's bottom are normally ones GitHub dropped when
+		// they merged — nothing to do, the stack simply moved up under us. But a
+		// still-OPEN PR down there was genuinely inserted beneath the anchor
+		// (`sr restack` onto a new base, say), and /add only appends upward, so
+		// the group has to be rebuilt to represent it.
+		spliceNeeded := false
+		if len(below) > 0 {
+			open, err := anyPROpen(below)
+			if err != nil {
+				return stackSync{}, err
+			}
+			spliceNeeded = open
+		}
+
+		if !spliceNeeded {
+			return growAnchor(anchor, above, dissolve, baseByPR)
+		}
+		dissolve = stackNumbersOf(groups)
+	}
+
+	// Nothing in our segment can be extended: the remote grouping has genuinely
+	// diverged rather than merely fallen behind. Local reshaping (`sr move`,
+	// `sr fold`, `sr reorder`) does this, but so does someone regrouping by hand
+	// in the web UI, and rebuilding would silently discard their intent.
+	//
+	// The policy is to rebuild — stackr treats the local graph as the source of
+	// truth everywhere else, and a stacking tool whose remote grouping quietly
+	// disagrees with its local one is worse than an occasionally opinionated one
+	// — but only with a human present. An unattended submit warns and leaves the
+	// remote alone rather than regrouping someone else's pull requests.
+	if diverged && !interactive {
+		fmt.Printf("Warning: local stack %v does not line up with GitHub stack(s) %v — "+
+			"leaving the GitHub grouping alone. Re-run interactively to rebuild it.\n",
+			prNumbers, stackNumbersOf(groups))
+		return stackSync{Stack: &groups[0]}, nil
+	}
+
+	return rebuildStack(dissolve, prNumbers, baseByPR)
+}
+
+// growAnchor dissolves the rival groupings and appends the rest of the segment
+// above the anchor's top.
+func growAnchor(anchor *GHStack, above []int, dissolve []int, baseByPR map[int]string) (stackSync, error) {
+	dissolved, err := unstackAll(dissolve)
+	if err != nil {
+		return stackSync{Dissolved: dissolved}, err
+	}
+
+	if len(above) == 0 {
+		// The anchor already holds exactly this segment. Adopt it: record the
+		// number and change nothing on GitHub. This is the path that heals a lost
+		// StackNumber, and it must stay side-effect free — a repo whose only
+		// problem was a stale cache should not have its PRs regrouped to fix it.
+		return stackSync{Stack: anchor, Dissolved: dissolved}, nil
+	}
+
+	if len(dissolved) > 0 {
+		// A PR just freed from another stack still carries the base ref that
+		// stack gave it, and ghAddToStack validates that each PR's base is the
+		// previous one's head. Re-point them now, while they are ungrouped and
+		// their bases are mutable.
+		retargetBases(above, baseByPR)
+	}
+
+	s, err := ghAddToStack(anchor.Number, above)
+	return stackSync{Stack: s, Dissolved: dissolved}, err
 }
 
 // retargetBases points each PR's base at what the local graph says it should be.

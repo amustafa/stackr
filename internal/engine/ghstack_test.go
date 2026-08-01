@@ -214,11 +214,10 @@ func TestClassifyAgainstRemote(t *testing.T) {
 	}
 }
 
-// A segment can come to span two previously separate GitHub stacks — `sr move`,
-// `sr fold` and `sr reorder` all merge segments. Keeping only the first recorded
-// number would make ghAddToStack fail for every PR belonging to the other one,
-// and since nothing would then update, every later submit would fail identically.
-func TestMapSegment_CollectsEveryRecordedStack(t *testing.T) {
+// mapSegment reads PR numbers and bases out of the local record, and nothing
+// else. The stack a PR belongs to comes from GitHub, so a disagreeing (here,
+// entirely absent) StackNumber must not change what this produces.
+func TestMapSegment_ReadsNumbersAndBasesOnly(t *testing.T) {
 	prInfo := &store.PRInfo{Branches: map[string]*store.BranchPR{
 		"a": {Number: 42, BaseBranch: "main", StackNumber: 0},
 		"b": {Number: 43, BaseBranch: "a", StackNumber: 7},
@@ -227,7 +226,6 @@ func TestMapSegment_CollectsEveryRecordedStack(t *testing.T) {
 
 	seg := mapSegment(prInfo, []string{"a", "b", "c"})
 
-	wantInts(t, "recorded", seg.recorded, []int{7, 9})
 	// Order matters: ghCreateStack validates the chain bottom-to-top, so a
 	// reordered or mismapped PR list fails at GitHub rather than here.
 	wantInts(t, "prNumbers", seg.prNumbers, []int{42, 43, 44})
@@ -268,24 +266,6 @@ func TestMapSegment_SkipsBranchesWithoutAPR(t *testing.T) {
 	// The PR list must stay aligned with the branch list, or the stack is
 	// registered with the wrong members.
 	wantInts(t, "prNumbers", seg.prNumbers, []int{42, 44})
-	// One distinct stack, so this segment can still be extended rather than rebuilt.
-	wantInts(t, "recorded", seg.recorded, []int{7})
-}
-
-func TestMapSegment_NoRecordedStacksMeansCreateFresh(t *testing.T) {
-	prInfo := &store.PRInfo{Branches: map[string]*store.BranchPR{
-		"a": {Number: 42},
-		"b": {Number: 43},
-	}}
-
-	seg := mapSegment(prInfo, []string{"a", "b"})
-	if len(seg.recorded) != 0 {
-		t.Errorf("recorded = %v, want empty so reconcileStack creates rather than rebuilds", seg.recorded)
-	}
-}
-
-func TestSortedKeys_IsDeterministic(t *testing.T) {
-	wantInts(t, "sortedKeys", sortedKeys(map[int]bool{9: true, 7: true, 12: true}), []int{7, 9, 12})
 }
 
 // A stack that has already gone away is the state unstacking was trying to
@@ -302,4 +282,121 @@ func TestIsMissingStack(t *testing.T) {
 			t.Errorf("isMissingStack(%q) = %v, want %v", msg, got, want)
 		}
 	}
+}
+
+// numberedStack builds an open stack with a specific stack number, so a test can
+// tell one group from another.
+func numberedStack(number int, prs ...int) GHStack {
+	s := GHStack{Number: number, Open: true}
+	for _, n := range prs {
+		s.PullRequests = append(s.PullRequests, GHStackPR{Number: n, State: "open"})
+	}
+	return s
+}
+
+// The listing is repository-wide, so most of what it returns has nothing to do
+// with the segment being submitted. Reconciling against an unrelated stack would
+// dissolve someone else's grouping.
+func TestStacksContaining_IgnoresUnrelatedStacksAndSortsByNumber(t *testing.T) {
+	all := []GHStack{
+		numberedStack(9, 44, 45),
+		numberedStack(3, 90, 91), // unrelated
+		numberedStack(7, 42, 43),
+	}
+
+	got := stacksContaining(all, []int{42, 43, 44, 45})
+
+	wantInts(t, "stacksContaining", stackNumbersOf(got), []int{7, 9})
+}
+
+// chooseAnchor is where the three shapes the remote can be in are decided. Each
+// case names the situation it stands for, because getting the anchor wrong is
+// not a visible failure — it silently dissolves a grouping that could have been
+// extended, churning the stack number on PRs already under review.
+func TestChooseAnchor(t *testing.T) {
+	merged := numberedStack(7, 43)
+	merged.Open = false
+
+	tests := map[string]struct {
+		prNumbers    []int
+		groups       []GHStack
+		wantAnchor   int // 0 means "no anchor, rebuild"
+		wantStart    int
+		wantDissolve []int
+	}{
+		// Nothing to change on GitHub: the recorded number was simply lost.
+		"remote already holds the whole segment": {
+			prNumbers:    []int{42, 43, 44},
+			groups:       []GHStack{numberedStack(7, 42, 43, 44)},
+			wantAnchor:   7,
+			wantStart:    0,
+			wantDissolve: nil,
+		},
+		// a-b registered, c-d-e new: extend upward.
+		"remote holds a lower run": {
+			prNumbers:    []int{42, 43, 44, 45, 46},
+			groups:       []GHStack{numberedStack(7, 42, 43)},
+			wantAnchor:   7,
+			wantStart:    0,
+			wantDissolve: nil,
+		},
+		// a-b and d-e registered separately: the lower run anchors, the upper one
+		// is dissolved so c, d and e can be appended to it.
+		"two rival groups: the lower one anchors": {
+			prNumbers:    []int{42, 43, 44, 45, 46},
+			groups:       []GHStack{numberedStack(7, 42, 43), numberedStack(9, 45, 46)},
+			wantAnchor:   7,
+			wantStart:    0,
+			wantDissolve: []int{9},
+		},
+		// GitHub drops merged PRs, so the live group can start above our bottom.
+		"anchor starts above the segment bottom": {
+			prNumbers:    []int{42, 43, 44},
+			groups:       []GHStack{numberedStack(9, 43, 44)},
+			wantAnchor:   9,
+			wantStart:    1,
+			wantDissolve: nil,
+		},
+		// A closed stack keeps its members but cannot be added to.
+		"closed stack cannot anchor": {
+			prNumbers:    []int{42, 43, 44},
+			groups:       []GHStack{merged},
+			wantAnchor:   0,
+			wantDissolve: []int{7},
+		},
+		// The group's members are not a run of ours at all — genuinely diverged.
+		"non-contiguous group cannot anchor": {
+			prNumbers:    []int{42, 43, 44},
+			groups:       []GHStack{numberedStack(7, 42, 44)},
+			wantAnchor:   0,
+			wantDissolve: []int{7},
+		},
+	}
+
+	for name, tc := range tests {
+		anchor, start, dissolve := chooseAnchor(tc.prNumbers, tc.groups)
+
+		gotAnchor := 0
+		if anchor != nil {
+			gotAnchor = anchor.Number
+		}
+		if gotAnchor != tc.wantAnchor {
+			t.Errorf("%s: anchor = #%d, want #%d", name, gotAnchor, tc.wantAnchor)
+			continue
+		}
+		if anchor != nil && start != tc.wantStart {
+			t.Errorf("%s: start = %d, want %d", name, start, tc.wantStart)
+		}
+		wantInts(t, name+": dissolve", dissolve, tc.wantDissolve)
+	}
+}
+
+// The listing is read once per submit but a fork produces several segments, so a
+// stack dissolved for one must not still look live to the next.
+func TestWithoutStacks_DropsDissolvedGroups(t *testing.T) {
+	all := []GHStack{numberedStack(7, 42), numberedStack(9, 44), numberedStack(11, 46)}
+
+	got := withoutStacks(all, []int{9})
+
+	wantInts(t, "withoutStacks", stackNumbersOf(got), []int{7, 11})
 }
