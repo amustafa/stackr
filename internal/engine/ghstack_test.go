@@ -227,14 +227,29 @@ func TestMapSegment_CollectsEveryRecordedStack(t *testing.T) {
 
 	seg := mapSegment(prInfo, []string{"a", "b", "c"})
 
-	if len(seg.recorded) != 2 || seg.recorded[0] != 7 || seg.recorded[1] != 9 {
-		t.Fatalf("recorded = %v, want both stacks [7 9] so the rebuild can dissolve each", seg.recorded)
+	wantInts(t, "recorded", seg.recorded, []int{7, 9})
+	// Order matters: ghCreateStack validates the chain bottom-to-top, so a
+	// reordered or mismapped PR list fails at GitHub rather than here.
+	wantInts(t, "prNumbers", seg.prNumbers, []int{42, 43, 44})
+
+	for pr, want := range map[int]string{42: "main", 43: "a", 44: "b"} {
+		if got := seg.baseByPR[pr]; got != want {
+			t.Errorf("baseByPR[%d] = %q, want %q", pr, got, want)
+		}
 	}
-	if len(seg.prNumbers) != 3 {
-		t.Errorf("prNumbers = %v, want all three", seg.prNumbers)
+}
+
+// wantInts compares an int slice element by element, so a test cannot pass on
+// length alone while mapping the wrong values.
+func wantInts(t *testing.T, label string, got, want []int) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s = %v, want %v", label, got, want)
 	}
-	if seg.baseByPR[43] != "a" {
-		t.Errorf("baseByPR[43] = %q, want the local graph's parent", seg.baseByPR[43])
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("%s = %v, want %v", label, got, want)
+		}
 	}
 }
 
@@ -250,10 +265,11 @@ func TestMapSegment_SkipsBranchesWithoutAPR(t *testing.T) {
 	if len(seg.branches) != 2 || seg.branches[0] != "a" || seg.branches[1] != "c" {
 		t.Fatalf("branches = %v, want only those with a PR", seg.branches)
 	}
+	// The PR list must stay aligned with the branch list, or the stack is
+	// registered with the wrong members.
+	wantInts(t, "prNumbers", seg.prNumbers, []int{42, 44})
 	// One distinct stack, so this segment can still be extended rather than rebuilt.
-	if len(seg.recorded) != 1 || seg.recorded[0] != 7 {
-		t.Errorf("recorded = %v, want [7]", seg.recorded)
-	}
+	wantInts(t, "recorded", seg.recorded, []int{7})
 }
 
 func TestMapSegment_NoRecordedStacksMeansCreateFresh(t *testing.T) {
@@ -269,16 +285,7 @@ func TestMapSegment_NoRecordedStacksMeansCreateFresh(t *testing.T) {
 }
 
 func TestSortedKeys_IsDeterministic(t *testing.T) {
-	got := sortedKeys(map[int]bool{9: true, 7: true, 12: true})
-	want := []int{7, 9, 12}
-	if len(got) != len(want) {
-		t.Fatalf("sortedKeys = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("sortedKeys = %v, want %v", got, want)
-		}
-	}
+	wantInts(t, "sortedKeys", sortedKeys(map[int]bool{9: true, 7: true, 12: true}), []int{7, 9, 12})
 }
 
 // A stack that has already gone away is the state unstacking was trying to
