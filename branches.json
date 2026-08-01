@@ -1,11 +1,20 @@
 {
   "version": 1,
   "branches": {
+    "am/aiprepare-diff-command": {
+      "parentBranchName": "am/fix-move",
+      "parentBranchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
+      "branchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
+      "children": [],
+      "description": "sr submit --aiprepare references the diff by command instead of embedding it"
+    },
     "am/fix-move": {
       "parentBranchName": "main",
       "parentBranchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
       "branchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
-      "children": []
+      "children": [
+        "am/aiprepare-diff-command"
+      ]
     },
     "main": {
       "branchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
