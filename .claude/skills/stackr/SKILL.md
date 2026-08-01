@@ -85,6 +85,10 @@ or the graph desyncs.
       sr submit --title "..." --body-file /tmp/pr.md
       sr address-review --aiprepare            # all unresolved comments as JSON
 
+  `sr submit --aiprepare` leaves the diff out on purpose — it hands you a
+  `diffCommand` to run yourself, so you only spend context on the patch when the
+  description, commits and context entries aren't enough to describe the change.
+
 - **Interactive**: bare `sr submit` / `sr address-review` runs a wizard.
 - **AI-driven**: `--ai` hands the whole task to a fresh Claude session.
 

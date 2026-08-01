@@ -8,7 +8,9 @@ Every workflow command in stackr follows a single interaction pattern with five 
 
 **2. Fully parameterized CLI.** Every parameter the TUI collects can be passed as a flag (`--title`, `--body`, `--draft`). When all required parameters are present, the command runs without prompts. This makes the workflow scriptable and testable without any AI involvement.
 
-**3. Context preparation (`--aiprepare`).** Outputs a JSON blob to stdout containing everything an agent needs to make decisions: the current state (branch, diff, commits, existing PR, unresolved review threads), the operation's options, and any templates. This is a read-only operation — no side effects.
+**3. Context preparation (`--aiprepare`).** Outputs a JSON blob to stdout containing everything an agent needs to make decisions: the current state (branch, commits, existing PR, unresolved review threads), the operation's options, and any templates. This is a read-only operation — no side effects.
+
+The blob is spent from the caller's context window, so anything unbounded is *referenced* rather than embedded: `sr submit --aiprepare` emits a `diffCommand` — the `git diff` invocation that prints the branch's patch — instead of the patch itself, leaving the agent to pay that cost only when it needs to read the code.
 
 **4. In-session agent skill.** A Claude Code skill (`sr claude install`) teaches agents the full command vocabulary. An agent already in a session calls `--aiprepare` to understand the situation, makes decisions using its conversation context, then calls the fully parameterized CLI to execute. The agent composes steps 2 and 3 itself. This is the highest-fidelity mode because the agent has the full conversation history, codebase understanding, and user intent.
 
