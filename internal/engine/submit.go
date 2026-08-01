@@ -450,8 +450,13 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 		goal += ". Mark the PR as a draft (add --draft flag)"
 	}
 
+	// Deliberately no --bare. It is tempting here — it skips hooks, plugin sync
+	// and CLAUDE.md auto-discovery, which is what you want for a scripted
+	// one-shot — but it also refuses to read OAuth or the keychain, taking
+	// credentials strictly from ANTHROPIC_API_KEY or an apiKeyHelper. Users
+	// logged in with `claude /login` have neither, so --bare makes this command
+	// fail with "Not logged in" for everyone on a subscription.
 	args := []string{
-		"--bare",
 		"-p", goal,
 		"--allowedTools", "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *)",
 		"--append-system-prompt", systemPrompt,

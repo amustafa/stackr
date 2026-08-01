@@ -29,8 +29,10 @@ func SandboxConfigAI(c *context.Context) error {
 	goal := "/goal the sandbox configuration reflects the user's stated intent. " +
 		"Read the current config from stdin, discuss changes, and apply them with " +
 		"`sr sandbox config` or by editing config values."
+	// No --bare — it reads credentials only from ANTHROPIC_API_KEY or an
+	// apiKeyHelper, never OAuth or the keychain, so it fails with "Not logged
+	// in" for anyone signed in via `claude /login`. See submitAI.
 	args := []string{
-		"--bare",
 		"-p", goal,
 		"--allowedTools", "Read,Edit,Bash(sr sandbox config *)",
 		"--append-system-prompt", sandboxConfigSystemPrompt(),
