@@ -7,6 +7,10 @@
       "url": "https://github.com/amustafa/stackr/pull/13",
       "baseBranch": "skill-prompt-block"
     },
+    "am/fix-move": {
+      "state": "open",
+      "baseBranch": "main"
+    },
     "am/pr21-followups": {
       "number": 25,
       "title": "Fix multi-commit squash detection and address remaining #21 review comments",
