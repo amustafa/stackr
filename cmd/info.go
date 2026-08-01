@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/amustafa/stackr/internal/engine"
+	"github.com/amustafa/stackr/internal/graph"
+	"github.com/amustafa/stackr/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +53,12 @@ var infoCmd = &cobra.Command{
 		}
 		if b.Description != "" {
 			fmt.Printf("Objective: %s\n", b.Description)
+		}
+
+		// PR metadata is best-effort: a branch that was never submitted simply
+		// has none, which is not an error worth surfacing here.
+		if prInfo, err := ctx.Store.ReadPRInfo(); err == nil {
+			printPRSection(g, prInfo, branch)
 		}
 		if len(b.Context) > 0 {
 			fmt.Printf("\nContext:\n")
@@ -99,6 +108,55 @@ var infoCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// printPRSection renders the pull request block of `sr info`, including the
+// GitHub stack the PR belongs to and its position within it.
+func printPRSection(g *graph.Graph, prInfo *store.PRInfo, branch string) {
+	pr := prInfo.Branches[branch]
+	if pr == nil || pr.Number == 0 {
+		return
+	}
+
+	state := pr.State
+	if state == "" {
+		state = "open"
+	}
+	if pr.Draft {
+		state += ", draft"
+	}
+
+	fmt.Printf("\nPull Request:\n")
+	fmt.Printf("  PR:     #%d (%s)\n", pr.Number, strings.ToLower(state))
+	if pr.Title != "" {
+		fmt.Printf("  Title:  %s\n", pr.Title)
+	}
+	if pr.BaseBranch != "" {
+		fmt.Printf("  Base:   %s\n", pr.BaseBranch)
+	}
+	if pr.URL != "" {
+		fmt.Printf("  URL:    %s\n", pr.URL)
+	}
+
+	if pr.StackNumber == 0 {
+		return
+	}
+
+	pos, size := engine.StackPosition(g, prInfo, branch)
+	fmt.Printf("  Stack:  GitHub stack #%d (%d of %d)\n", pr.StackNumber, pos, size)
+
+	// Show the whole stack bottom-to-top so the PR's place in it is obvious.
+	for i, name := range engine.StackMembers(g, prInfo, pr.StackNumber) {
+		marker := " "
+		if name == branch {
+			marker = "*"
+		}
+		label := name
+		if member := prInfo.Branches[name]; member != nil && member.Number > 0 {
+			label = fmt.Sprintf("%s (#%d)", name, member.Number)
+		}
+		fmt.Printf("          %s %d. %s\n", marker, i+1, label)
+	}
 }
 
 var (

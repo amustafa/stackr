@@ -8,9 +8,14 @@ import (
 // RenderOpts controls log rendering.
 type RenderOpts struct {
 	CurrentBranch string
-	ShowAll       bool                              // Show all stacks, not just current
-	Reverse       bool                              // Reverse order (trunk at bottom)
-	CommitsFn     func(branch string) []CommitInfo  // Optional: resolve commits per branch
+	ShowAll       bool                             // Show all stacks, not just current
+	Reverse       bool                             // Reverse order (trunk at bottom)
+	CommitsFn     func(branch string) []CommitInfo // Optional: resolve commits per branch
+
+	// AnnotateFn appends caller-supplied text to a branch's line (PR number,
+	// GitHub stack, ...). The graph package deliberately knows nothing about
+	// pull requests; callers that do pass the formatting in here.
+	AnnotateFn func(branch string) string
 }
 
 // CommitInfo holds info about a single commit for rendering.
@@ -142,6 +147,12 @@ func (g *Graph) formatBranch(name string, opts RenderOpts) string {
 	b := g.Branches[name]
 	if b != nil && b.Frozen {
 		suffix += " [frozen]"
+	}
+
+	if opts.AnnotateFn != nil {
+		if note := opts.AnnotateFn(name); note != "" {
+			suffix += " " + note
+		}
 	}
 
 	pointer := ""
