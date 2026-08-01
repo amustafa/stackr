@@ -59,6 +59,7 @@ func Delete(c *context.Context, opts DeleteOpts) error {
 			}
 			_ = g.RemoveBranch(b)
 			_ = c.Git.DeleteBranch(b, opts.Force)
+			_ = c.Store.DeletePushRecordsForBranch(b)
 			if !c.Quiet {
 				fmt.Printf("Deleted %s\n", b)
 			}
@@ -70,6 +71,9 @@ func Delete(c *context.Context, opts DeleteOpts) error {
 		if err := c.Git.DeleteBranch(name, opts.Force); err != nil {
 			return fmt.Errorf("git branch delete failed: %w", err)
 		}
+		// Drop the Push Record too: a branch name that is later recreated must
+		// not inherit a claim on a remote it never wrote (ADR-0014).
+		_ = c.Store.DeletePushRecordsForBranch(name)
 		if !c.Quiet {
 			fmt.Printf("Deleted %s (children reparented)\n", name)
 		}

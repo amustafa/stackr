@@ -420,8 +420,6 @@ func mergeBranchPR(base, local, remote *BranchPR) *BranchPR {
 		}
 		return cloneBranchPR(remote)
 	case inLocal && inRemote:
-		// Both have it — take the one with the higher PR number,
-		// or the one with a more advanced state.
 		if !inBase {
 			// Both added — take whichever has a PR number.
 			if remote.Number > 0 {
@@ -429,16 +427,80 @@ func mergeBranchPR(base, local, remote *BranchPR) *BranchPR {
 			}
 			return cloneBranchPR(local)
 		}
-		// Modified in both — take the more advanced one.
-		if prStateRank(remote.State) > prStateRank(local.State) {
-			return cloneBranchPR(remote)
-		}
-		if remote.Number > local.Number {
-			return cloneBranchPR(remote)
-		}
-		return cloneBranchPR(local)
+		// Modified in both. Merging field by field rather than picking a whole
+		// struct: two clones commonly change *different* fields of the same
+		// entry — one retargets BaseBranch after a restack while the other
+		// records a StackNumber — and choosing one side wholesale silently
+		// discards the other's change.
+		return mergeBranchPRFields(base, local, remote)
 	}
 	return nil
+}
+
+// mergeBranchPRFields merges each field of a BranchPR independently.
+func mergeBranchPRFields(base, local, remote *BranchPR) *BranchPR {
+	merged := cloneBranchPR(local)
+
+	merged.URL = mergeString(base.URL, local.URL, remote.URL)
+	merged.Title = mergeString(base.Title, local.Title, remote.Title)
+	merged.BaseBranch = mergeString(base.BaseBranch, local.BaseBranch, remote.BaseBranch)
+
+	// State only ever advances (open -> merged/closed), so the further-along
+	// side wins regardless of who changed it.
+	if prStateRank(remote.State) > prStateRank(local.State) {
+		merged.State = remote.State
+	} else {
+		merged.State = local.State
+	}
+
+	merged.Number = mergeInt(base.Number, local.Number, remote.Number)
+	merged.Draft = mergeBool(base.Draft, local.Draft, remote.Draft)
+
+	// StackNumber is the one field where "both changed differently" cannot be
+	// resolved locally: each side believes the PR belongs to a different GitHub
+	// stack, and only GitHub knows which survived. Clearing it is the honest
+	// answer — the next submit re-registers the stack from the local graph,
+	// which is the source of truth anyway.
+	switch {
+	case local.StackNumber == remote.StackNumber:
+		merged.StackNumber = local.StackNumber
+	case local.StackNumber == base.StackNumber:
+		merged.StackNumber = remote.StackNumber
+	case remote.StackNumber == base.StackNumber:
+		merged.StackNumber = local.StackNumber
+	default:
+		merged.StackNumber = 0
+	}
+
+	return merged
+}
+
+func mergeInt(base, local, remote int) int {
+	if local == remote {
+		return local
+	}
+	if local == base {
+		return remote
+	}
+	if remote == base {
+		return local
+	}
+	// Both changed: a PR number only ever gets assigned, never reassigned, so
+	// the larger one is the later discovery.
+	if remote > local {
+		return remote
+	}
+	return local
+}
+
+func mergeBool(base, local, remote bool) bool {
+	if local == remote {
+		return local
+	}
+	if local == base {
+		return remote
+	}
+	return local
 }
 
 // ---------- Helpers ----------

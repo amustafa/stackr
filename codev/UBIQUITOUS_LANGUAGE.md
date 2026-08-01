@@ -48,7 +48,17 @@ A reference attached to a context entry identifying where it came from. Typed as
 A user-defined script at `.stackr/hooks/post-worktree` that runs after a worktree is created. Receives the worktree path as `$1`. Used for project-specific setup (copying `.env`, `.envrc`, editor config, etc.).
 
 **Frozen**:
-A branch excluded from automatic operations (restack, submit). No implied reason — the user decides why.
+A branch excluded from automatic operations. No implied reason — the user decides why. A frozen branch is never rebased and never pushed by an automatic operation. Whether that exclusion spreads to its **Upstack** is *operation-dependent*, and the test is whether the operation's effect on a dependent depends on the frozen branch having moved:
+
+- **Wall** — **Restack** stops at the frozen branch. Rebasing its dependents is meaningless when the base they would rebase onto was deliberately left in place.
+- **Hole** — **Submit** skips only the frozen branch; branches above and below it are still pushed, because each can carry changes of its own.
+
+Within a cascade, freezing is an intention rather than a failure: always skipped and reported, never an error. But an operation that takes a single named branch as its subject has no remainder to continue with, so naming a frozen branch as that subject is an error (`ErrFrozen`) — **Move** rejects a frozen source outright. Being the *target* of such an operation is never blocked; ordinary wall/hole semantics resume against the resulting shape.
+_Avoid_: locked, pinned
+
+**Push Record**:
+The commit SHA a given clone believes it last left on a branch's remote ref, keyed by remote and branch. Local-only, never shared — its meaning is "*this* clone put that there", so a record travelling between clones would assert someone else's push as our own. Written by every operation that settles local against remote, not only by pushes.
+_Avoid_: upstream, tracking ref (those are git's, and they move on fetch)
 
 ### Operations
 
@@ -64,7 +74,19 @@ _Avoid_: pull, fetch (those are git operations)
 The full "catch up with the world" sequence: fetch trunk, restack, and prune merged branches. Pruning requires confirmation. Can pause mid-way on conflicts.
 
 **Submit**:
-Push branches to the remote and manage PRs. Pushes the current branch and its downstack ancestors. Offers to push the upstack subtree. With `--stack`, includes the upstack automatically.
+Push branches to the remote and manage PRs. Pushes the current branch and its downstack ancestors. Offers to push the upstack subtree. With `--stack`, includes the upstack automatically. Runs a **Preflight** first, so no branch is pushed until every branch's **Content Divergence** has been settled.
+
+**Preflight**:
+The phase of a **Submit** that settles every branch against its remote before any branch is pushed. Classifies each branch bottom-up, prompts for remediation on **Content Divergence**, and restacks after any local change. Mutates local branches; publishes nothing. Stopping mid-preflight keeps the remediations already made — re-running **Submit** resumes from the same place because the classification is re-derived, not remembered.
+_Avoid_: dry run (that inspects without mutating), validation (it resolves, not just checks)
+
+**Ref Divergence**:
+Local and remote refs where neither is an ancestor of the other. Every **Restack** produces it, because rebasing rewrites SHAs, so on its own it carries no information about whether anything would be lost.
+_Avoid_: divergence, unqualified (ambiguous with Content Divergence — always say which)
+
+**Content Divergence**:
+The remote branch holds changes the local branch does not contain. The only condition that justifies stopping a **Submit**. Independent of **Ref Divergence**: a restacked branch has the latter without the former, and a colleague dropping a commit produces the former without either being detectable from content.
+_Avoid_: conflict (that's what happens during remediation, not the condition itself)
 
 **Fold**:
 Merge a branch into its parent. The branch is removed and its children are reparented to the parent.

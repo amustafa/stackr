@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // MergeConflictError indicates a merge that stopped due to conflicts.
@@ -56,6 +57,69 @@ func (r *Runner) Merge(theirs string) error {
 		return err
 	}
 	return nil
+}
+
+// MergeSquash stages the changes theirs brings in without recording a merge
+// commit, leaving the caller to commit them as one ordinary commit.
+//
+// A real merge commit is wrong inside a stack: `git rebase` linearises, so the
+// next Restack would drop it and replay both parents flat. Squashing keeps the
+// branch a flat sequence on top of its parent — the invariant resolveBase and
+// RebaseOnto depend on — and resolves conflicts once rather than once per commit.
+func (r *Runner) MergeSquash(theirs string) error {
+	_, stderr, err := r.RunGitCaptureAll("merge", "--squash", theirs)
+	if err == nil {
+		return nil
+	}
+	if r.HasConflicts() || strings.Contains(stderr, "CONFLICT") {
+		return &MergeConflictError{Theirs: theirs}
+	}
+	return fmt.Errorf("merge --squash %s failed: %s", theirs, strings.TrimSpace(stderr))
+}
+
+// MergeSquashAbort discards a squash merge that stopped on conflicts. A squash
+// merge records no MERGE_HEAD, so `git merge --abort` does not apply; resetting
+// the index and worktree to HEAD is the equivalent.
+func (r *Runner) MergeSquashAbort() error {
+	return r.RunGit("reset", "--merge")
+}
+
+// CherryPick replays commits onto the current branch, oldest first.
+func (r *Runner) CherryPick(shas ...string) error {
+	if len(shas) == 0 {
+		return nil
+	}
+	args := append([]string{"cherry-pick", "--allow-empty", "--keep-redundant-commits"}, shas...)
+	_, stderr, err := r.RunGitCaptureAll(args...)
+	if err == nil {
+		return nil
+	}
+	if r.IsCherryPickInProgress() {
+		return &MergeConflictError{Theirs: shas[0]}
+	}
+	return fmt.Errorf("cherry-pick failed: %s", strings.TrimSpace(stderr))
+}
+
+// CherryPickAbort restores the branch to its pre-cherry-pick state.
+func (r *Runner) CherryPickAbort() error {
+	return r.RunGit("cherry-pick", "--abort")
+}
+
+// IsCherryPickInProgress checks for CHERRY_PICK_HEAD.
+func (r *Runner) IsCherryPickInProgress() bool {
+	_, err := r.RunGitCapture("rev-parse", "--verify", "CHERRY_PICK_HEAD")
+	return err == nil
+}
+
+// HasConflicts reports whether the index holds unmerged paths.
+func (r *Runner) HasConflicts() bool {
+	out, err := r.RunGitCapture("diff", "--name-only", "--diff-filter=U")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// ResetHard moves a branch to a revision, discarding local commits and changes.
+func (r *Runner) ResetHard(rev string) error {
+	return r.RunGit("reset", "--hard", rev)
 }
 
 // IsMergeInProgress checks for MERGE_HEAD which exists during an unfinished merge.

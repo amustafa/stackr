@@ -6,6 +6,7 @@ import (
 
 	"github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/pkg/version"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -44,8 +45,17 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// --interactive defaults to true, so without a TTY check every CI run
+		// would claim to be interactive and stackr would try to render prompts
+		// nobody can answer. An explicitly passed flag still wins: scripts that
+		// drive stackr through a pty rely on it.
+		interactive := flagInteractive
+		if interactive && !cmd.Flags().Changed("interactive") && !isTerminal() {
+			interactive = false
+		}
+
 		var err error
-		ctx, err = context.Discover(cwd, flagDebug, flagInteractive)
+		ctx, err = context.Discover(cwd, flagDebug, interactive)
 		if err != nil {
 			return err
 		}
@@ -71,4 +81,10 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// isTerminal reports whether stdin and stdout are both attached to a terminal.
+// Both matter: a prompt needs somewhere to draw and somewhere to read from.
+func isTerminal() bool {
+	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
 }
