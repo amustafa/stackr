@@ -56,6 +56,13 @@
       "url": "https://github.com/amustafa/stackr/pull/21",
       "baseBranch": "main"
     },
+    "am/submit-covers-every-branch": {
+      "number": 35,
+      "title": "submit creates a PR for every branch it pushes",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/35",
+      "baseBranch": "am/fix-ai-spawn"
+    },
     "am/sync-worktree-cleanup": {
       "number": 26,
       "title": "sync: clean up worktrees left behind by merged branches",
