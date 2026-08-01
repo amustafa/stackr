@@ -24,6 +24,15 @@ type CommitInfo struct {
 	Subject  string
 }
 
+// Row is one rendered line of the tree. Branch names the branch the line
+// stands for, and is empty for connector and commit lines. Interactive
+// callers need that association to map a cursor position back to a branch;
+// RenderTree itself only ever uses Line.
+type Row struct {
+	Line   string
+	Branch string
+}
+
 // RenderTree produces a Graphite-style tree visualization of the stacks.
 //
 // Output style (tips at top, trunk at bottom, forks shown with connectors):
@@ -38,14 +47,30 @@ type CommitInfo struct {
 //	│
 //	◯ main (trunk)
 func (g *Graph) RenderTree(opts RenderOpts) string {
+	rows := g.RenderTreeRows(opts)
+	if len(rows) == 0 {
+		return "No trunk branch found\n"
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		b.WriteString(r.Line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// RenderTreeRows produces the same tree as RenderTree, but as one Row per
+// line so callers can tell which branch (if any) each line belongs to.
+// Returns nil when there is no trunk.
+func (g *Graph) RenderTreeRows(opts RenderOpts) []Row {
 	trunk := g.TrunkName()
 	if trunk == "" {
-		return "No trunk branch found\n"
+		return nil
 	}
 
 	children := g.ChildrenOf(trunk)
 	if len(children) == 0 {
-		return g.formatBranch(trunk, opts) + "\n"
+		return []Row{{Line: g.formatBranch(trunk, opts), Branch: trunk}}
 	}
 
 	// Filter to current stack when not showing all.
@@ -67,23 +92,23 @@ func (g *Graph) RenderTree(opts RenderOpts) string {
 	g.Branches[trunk].Children = children
 	defer func() { g.Branches[trunk].Children = origChildren }()
 
-	var lines []string
-	g.renderNode(trunk, opts, &lines)
+	var rows []Row
+	g.renderNode(trunk, opts, &rows)
 
-	return strings.Join(lines, "\n") + "\n"
+	return rows
 }
 
 // renderNode recursively renders a branch and its subtree.
 // Children appear above the branch (tips at top, trunk at bottom).
 // When a branch has multiple children, the primary child (containing the
 // current branch) gets the straight │ line; siblings branch off with ├─┘.
-func (g *Graph) renderNode(name string, opts RenderOpts, lines *[]string) {
+func (g *Graph) renderNode(name string, opts RenderOpts, rows *[]Row) {
 	children := g.ChildrenOf(name)
 
 	if len(children) == 0 {
 		// Leaf — just render the branch and its commits.
-		*lines = append(*lines, g.formatBranch(name, opts))
-		g.appendCommits(name, opts, lines)
+		*rows = append(*rows, Row{Line: g.formatBranch(name, opts), Branch: name})
+		g.appendCommits(name, opts, rows)
 		return
 	}
 
@@ -92,22 +117,23 @@ func (g *Graph) renderNode(name string, opts RenderOpts, lines *[]string) {
 	others := without(children, primary)
 
 	// 1. Render primary subtree (appears at the top of output).
-	g.renderNode(primary, opts, lines)
-	*lines = append(*lines, "│")
+	g.renderNode(primary, opts, rows)
+	*rows = append(*rows, Row{Line: "│"})
 
-	// 2. Render side branches with │ prefix and ├─┘ connector.
+	// 2. Render side branches with │ prefix and ├─┘ connector. Indenting
+	//    rewrites the line but must preserve which branch it stands for.
 	for _, child := range others {
-		var sideLines []string
-		g.renderNode(child, opts, &sideLines)
-		for _, sl := range sideLines {
-			*lines = append(*lines, "│ "+sl)
+		var side []Row
+		g.renderNode(child, opts, &side)
+		for _, sr := range side {
+			*rows = append(*rows, Row{Line: "│ " + sr.Line, Branch: sr.Branch})
 		}
-		*lines = append(*lines, "├─┘")
+		*rows = append(*rows, Row{Line: "├─┘"})
 	}
 
 	// 3. Render this node.
-	*lines = append(*lines, g.formatBranch(name, opts))
-	g.appendCommits(name, opts, lines)
+	*rows = append(*rows, Row{Line: g.formatBranch(name, opts), Branch: name})
+	g.appendCommits(name, opts, rows)
 }
 
 // pickPrimary returns the child that contains the current branch,
@@ -163,13 +189,13 @@ func (g *Graph) formatBranch(name string, opts RenderOpts) string {
 	return fmt.Sprintf("%s %s%s%s", marker, name, suffix, pointer)
 }
 
-func (g *Graph) appendCommits(name string, opts RenderOpts, lines *[]string) {
+func (g *Graph) appendCommits(name string, opts RenderOpts, rows *[]Row) {
 	if opts.CommitsFn == nil || g.IsTrunk(name) {
 		return
 	}
 	commits := opts.CommitsFn(name)
 	for _, c := range commits {
-		*lines = append(*lines, fmt.Sprintf("│   %s %s", c.ShortSHA, c.Subject))
+		*rows = append(*rows, Row{Line: fmt.Sprintf("│   %s %s", c.ShortSHA, c.Subject)})
 	}
 }
 

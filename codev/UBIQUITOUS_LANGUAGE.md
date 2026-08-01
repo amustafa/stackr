@@ -48,12 +48,9 @@ A reference attached to a context entry identifying where it came from. Typed as
 A user-defined script at `.stackr/hooks/post-worktree` that runs after a worktree is created. Receives the worktree path as `$1`. Used for project-specific setup (copying `.env`, `.envrc`, editor config, etc.).
 
 **Frozen**:
-A branch excluded from automatic operations. No implied reason — the user decides why. A frozen branch is never rebased and never pushed by an automatic operation. Whether that exclusion spreads to its **Upstack** is *operation-dependent*, and the test is whether the operation's effect on a dependent depends on the frozen branch having moved:
+A branch the user has withdrawn from operations that sweep over it. No implied reason — the user decides why. Whether the exclusion spreads to the branch's **Upstack** is operation-dependent — a *wall* for **Restack**, a *hole* for **Submit** (see ADR-0015). Being an intention rather than a failure, freezing is always skipped and reported within a sweep, never an error.
 
-- **Wall** — **Restack** stops at the frozen branch. Rebasing its dependents is meaningless when the base they would rebase onto was deliberately left in place.
-- **Hole** — **Submit** skips only the frozen branch; branches above and below it are still pushed, because each can carry changes of its own.
-
-Within a cascade, freezing is an intention rather than a failure: always skipped and reported, never an error. But an operation that takes a single named branch as its subject has no remainder to continue with, so naming a frozen branch as that subject is an error (`ErrFrozen`) — **Move** rejects a frozen source outright. Being the *target* of such an operation is never blocked; ordinary wall/hole semantics resume against the resulting shape.
+Freezing protects a branch's **position**, not its commits. Naming a frozen branch directly exempts it from having its history rebuilt in place, but not from being relocated: **Move** rejects a frozen source. Being the *target* of a **Move** is never blocked.
 _Avoid_: locked, pinned
 
 **Push Record**:
@@ -65,6 +62,17 @@ _Avoid_: upstream, tracking ref (those are git's, and they move on fetch)
 **Restack**:
 Restore the stack to a valid state by rebasing each branch onto its parent. A stackr operation, not a git command.
 _Avoid_: rebase (that's the underlying git operation)
+
+**Move**:
+Relocate a branch to a new parent, taking its **Upstack** along. Defined as a graph repoint followed by a **Restack**: once the parent pointer changes, ordinary restack mechanics take hold — the frozen wall, conflict handling, and resumption via `sr continue`. The branch being relocated is the **Move Source**; the new parent is the **Move Target**.
+_Avoid_: reparent; rebase (git's operation, and only the second half of a Move)
+
+**Move Source**:
+The branch a **Move** relocates. Defaults to the current branch. May not be **Trunk**, and may not be **Frozen** — freezing pins a branch's position.
+
+**Move Target**:
+The branch a **Move** makes the new parent. May be **Trunk**, an ancestor, or a branch in another stack; may be **Frozen**. May never be the **Move Source** itself, any branch in the source's **Upstack** (which would make the graph cyclic), or the source's existing parent (which would do nothing).
+_Avoid_: base, destination, onto (`--onto` is the flag that names it, not the concept)
 
 **Get**:
 Pull branches from remote along the dependency path. Syncs trunk→target, then locally-existing upstack branches. Does not restack. Handles divergence by prompting or forcing. Can pause mid-walk on merge conflicts for `sr continue`.
@@ -218,4 +226,5 @@ The default non-`--sandbox` behavior when `sr implement` runs *inside* a Claude 
 - **"rebase" vs. "restack"** — resolved: rebase is git's operation; restack is stackr's higher-level operation that coordinates multiple rebases.
 - **"context" ambiguity** — resolved: two levels exist. **Branch Context** is high-level (decisions, approach). **Commit Context** is per-step (plan references, agent reasoning). Both are structured JSON, both live in the graph, both are lost on squash.
 - **"fork" vs. "sandbox"** — resolved: the feature is named **Sandbox** (`sr sandbox`) end-to-end. "Fork" is eliminated from all sandbox naming (internal paths, image tags, labels) to avoid collision with git forks; the word survives only in its unrelated stack sense (an **Upstack** that branches).
+- **"direct instruction" exemption from freezing** — resolved: naming a frozen branch directly exempts its *commits* from being rebuilt, not its *position* from being changed. `sr restack --branch <frozen>` works; `sr move --source <frozen>` is an error. ADR-0015 amended.
 - **"session" ambiguity** — a Claude session (the JSONL conversation under `~/.claude/projects`) vs. a zellij session (the multiplexer instance inside the container). The **Sandbox** hosts a zellij session that runs a Claude session; **Attach** connects to the zellij session, **resume**/`--continue` reconstructs the Claude session.
