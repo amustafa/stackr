@@ -5,7 +5,8 @@
       "title": "submit --aiprepare: reference the diff by command instead of embedding it",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/31",
-      "baseBranch": "am/fix-move"
+      "baseBranch": "am/fix-move",
+      "stackNumber": 32
     },
     "am/bugfix-submit-ai": {
       "number": 13,
@@ -19,14 +20,20 @@
       "title": "Pipe the request to spawned Claude sessions and make it visible",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/33",
-      "baseBranch": "am/remove-bare-on-claude-call"
+      "baseBranch": "am/remove-bare-on-claude-call",
+      "stackNumber": 32
     },
     "am/fix-move": {
       "number": 30,
       "title": "Move is a repoint plus a restack, with target validation and an interactive picker",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/30",
-      "baseBranch": "main"
+      "baseBranch": "main",
+      "stackNumber": 32
+    },
+    "am/ghstack-reconcile": {
+      "state": "open",
+      "baseBranch": "am/submit-covers-every-branch"
     },
     "am/pr21-followups": {
       "number": 25,
@@ -40,7 +47,8 @@
       "title": "Drop --bare from spawned Claude sessions so subscription logins work",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/34",
-      "baseBranch": "am/aiprepare-diff-command"
+      "baseBranch": "am/aiprepare-diff-command",
+      "stackNumber": 32
     },
     "am/restack-bugfix": {
       "number": 14,
@@ -61,7 +69,8 @@
       "title": "submit creates a PR for every branch it pushes",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/35",
-      "baseBranch": "am/fix-ai-spawn"
+      "baseBranch": "am/fix-ai-spawn",
+      "stackNumber": 32
     },
     "am/sync-worktree-cleanup": {
       "number": 26,
