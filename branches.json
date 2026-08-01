@@ -13,7 +13,7 @@
     "am/fix-ai-spawn": {
       "parentBranchName": "am/remove-bare-on-claude-call",
       "parentBranchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
-      "branchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
+      "branchRevision": "205eb343fe42960097a1c05c263c3208cf169489",
       "children": [],
       "description": "Pipe the request to spawned Claude sessions instead of -p, and surface it under --debug/--dry-run"
     },
