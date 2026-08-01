@@ -5,7 +5,9 @@
       "parentBranchName": "am/fix-move",
       "parentBranchRevision": "cfe58004b74c1220314882fdde34e8b0eac88a64",
       "branchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
-      "children": [],
+      "children": [
+        "am/remove-bare-on-claude-call"
+      ],
       "description": "sr submit --aiprepare references the diff by command instead of embedding it"
     },
     "am/fix-move": {
@@ -15,6 +17,12 @@
       "children": [
         "am/aiprepare-diff-command"
       ]
+    },
+    "am/remove-bare-on-claude-call": {
+      "parentBranchName": "am/aiprepare-diff-command",
+      "parentBranchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
+      "branchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
+      "children": []
     },
     "main": {
       "branchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
