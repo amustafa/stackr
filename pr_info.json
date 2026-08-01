@@ -5,8 +5,7 @@
       "title": "submit --aiprepare: reference the diff by command instead of embedding it",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/31",
-      "baseBranch": "am/fix-move",
-      "stackNumber": 32
+      "baseBranch": "am/fix-move"
     },
     "am/bugfix-submit-ai": {
       "number": 13,
@@ -15,13 +14,19 @@
       "url": "https://github.com/amustafa/stackr/pull/13",
       "baseBranch": "skill-prompt-block"
     },
+    "am/fix-ai-spawn": {
+      "number": 33,
+      "title": "Pipe the request to spawned Claude sessions and make it visible",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/33",
+      "baseBranch": "am/remove-bare-on-claude-call"
+    },
     "am/fix-move": {
       "number": 30,
       "title": "Move is a repoint plus a restack, with target validation and an interactive picker",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/30",
-      "baseBranch": "main",
-      "stackNumber": 32
+      "baseBranch": "main"
     },
     "am/pr21-followups": {
       "number": 25,
@@ -29,6 +34,10 @@
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/25",
       "baseBranch": "main"
+    },
+    "am/remove-bare-on-claude-call": {
+      "state": "open",
+      "baseBranch": "am/aiprepare-diff-command"
     },
     "am/restack-bugfix": {
       "number": 14,
