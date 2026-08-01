@@ -145,8 +145,10 @@ func continueRebase(c *context.Context) error {
 
 	if len(rs.Pending) > 0 {
 		// Resuming a paused restack: no branch here was named explicitly, so the
-		// frozen wall applies to all of them.
-		err := restackBranches(c, rs.Pending, rs.OrigBranch, false, nil)
+		// frozen wall applies to all of them. Nor is any of them freshly
+		// repointed — a move's repointed branch is rebased first, so by the time
+		// anything is pending it has already been replayed onto its new parent.
+		err := restackBranches(c, rs.Pending, rs.OrigBranch, false, nil, nil)
 		if err != nil {
 			return err
 		}

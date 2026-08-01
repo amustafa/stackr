@@ -97,7 +97,12 @@ func Move(c *context.Context, opts MoveOpts) error {
 	// duplicated. Naming source as the subject exempts it from the frozen wall,
 	// which is harmless because ValidateMoveSource already rejected a frozen
 	// source outright.
-	return Restack(c, RestackOpts{Branch: source, Upstack: true})
+	//
+	// Repointed is what makes the delegation correct when the target is one of
+	// source's own ancestors: without it, restack sees the new parent's tip in
+	// source's history (reached via the old parent), concludes source is already
+	// stacked, and silently leaves the intervening commits in place.
+	return Restack(c, RestackOpts{Branch: source, Upstack: true, Repointed: source})
 }
 
 // ValidateMoveSource reports whether a branch may be the subject of a move.
@@ -157,10 +162,22 @@ func SelectableMoveTargets(g *graph.Graph, source string) []string {
 // then reject.
 //
 // The reason text is shown verbatim to the user, next to the branch in the
-// picker, so it should read as a phrase completing "can't pick this because…".
-//
-// TODO(you): implement. See the discussion below for the four cases.
+// picker, so it reads as a phrase completing "can't pick this because…".
 func moveTargetReason(g *graph.Graph, source, candidate string) string {
+	// Self first, even though source is also a member of its own Upstack:
+	// reaching the cycle branch below would report "would create a cycle",
+	// which is true but unhelpful when you have simply picked your own branch.
+	if candidate == source {
+		return "can't move a branch onto itself"
+	}
+	for _, d := range g.UpstackTopo(source) {
+		if d == candidate {
+			return "would create a cycle — depends on " + source
+		}
+	}
+	if b := g.Branches[source]; b != nil && b.ParentBranchName == candidate {
+		return "already the parent"
+	}
 	return ""
 }
 

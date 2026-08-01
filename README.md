@@ -273,7 +273,7 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 | `sr split` | `sp` | Split the current branch into multiple branches |
 | `sr fold` | | Merge the current branch into its parent |
 | `sr squash` | | Combine commits within a branch |
-| `sr move` | | Move a branch onto a new parent |
+| `sr move` | | Move a branch onto a new parent (prompts if `--onto` is omitted) |
 | `sr reorder` | | Reorder branches in a stack |
 | `sr pop` | | Remove current branch and move to parent |
 | `sr freeze` | | Mark a branch as frozen (skip during restack) |
@@ -656,6 +656,15 @@ sr restack --branch feat-3 --base <sha>
 ```bash
 # Move a branch to a different parent
 sr move --onto feat-auth
+
+# Omit --onto to pick from a tree of the stacks. Branches you cannot move
+# onto — your own dependents, your current parent — are shown greyed with
+# the reason, rather than hidden.
+sr move
+
+# A move is a repoint plus a restack: the branch and everything stacked on
+# it are replayed onto the new parent. Skip the replay with:
+sr move --onto feat-auth --no-restack
 
 # Insert a branch between two existing ones
 sr create feat-middleware -i

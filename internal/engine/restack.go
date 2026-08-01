@@ -25,6 +25,14 @@ type RestackOpts struct {
 	// restacking. This is the escape hatch for a branch whose base was lost or
 	// corrupted beyond automatic recovery — see BaseUnresolvedError.
 	Base string
+
+	// Repointed names a branch whose parent was just changed in the graph, as
+	// Move does. Such a branch must not take the "already stacked on its
+	// parent" shortcut: when it moved down onto one of its own ancestors, the
+	// new parent's tip is still in its history via the old parent, so the
+	// ancestry test passes while the intervening commits very much still need
+	// replaying. Set by Move; no other caller needs it.
+	Repointed string
 }
 
 // Restack rebases branches so they're correctly stacked on their parents.
@@ -113,7 +121,12 @@ func Restack(c *context.Context, opts RestackOpts) error {
 		exempt[branch] = true
 	}
 
-	return restackBranches(c, toRestack, origBranch, opts.SkipBlocked, exempt)
+	repointed := map[string]bool{}
+	if opts.Repointed != "" {
+		repointed[opts.Repointed] = true
+	}
+
+	return restackBranches(c, toRestack, origBranch, opts.SkipBlocked, exempt, repointed)
 }
 
 // skippedBranch records a branch that could not be cleanly restacked.
@@ -138,7 +151,7 @@ type skippedBranch struct {
 // meaningless. Freezing is an intention rather than a failure, so it is always
 // reported and never returns an error. Branches in exempt were named explicitly
 // by the user and are restacked even when frozen.
-func restackBranches(c *context.Context, branches []string, origBranch string, skipBlocked bool, exempt map[string]bool) error {
+func restackBranches(c *context.Context, branches []string, origBranch string, skipBlocked bool, exempt, repointed map[string]bool) error {
 	g, err := c.Store.ReadGraph()
 	if err != nil {
 		return err
@@ -184,7 +197,14 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 		// wrong, git's ancestry cannot. This also self-heals the recorded base:
 		// if parentRev is an ancestor of the branch then, by definition, the
 		// branch's own commits are exactly (parentRev, name].
-		if isStackedOn(c, name, parentRev) {
+		//
+		// That inference holds only while the branch's parent *name* is
+		// unchanged. Repointing it breaks the "by definition": a branch moved
+		// down onto one of its own ancestors still has the new parent's tip in
+		// its history, reached through the old parent, so ancestry proves
+		// nothing about whether the intervening commits still need replaying.
+		// Move names the repointed branch here to opt out of the shortcut.
+		if !repointed[name] && isStackedOn(c, name, parentRev) {
 			b.ParentBranchRevision = parentRev
 			if newRev, rerr := c.Git.RevParse(name); rerr == nil {
 				b.BranchRevision = newRev
