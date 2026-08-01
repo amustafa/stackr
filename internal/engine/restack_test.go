@@ -224,3 +224,67 @@ func TestRestack_FrozenNeverErrorsWithoutSkipBlocked(t *testing.T) {
 		t.Error("a frozen branch must not leave resumable rebase state")
 	}
 }
+
+// Regression: a conflict partway through a restack used to discard the graph
+// updates for the branches that had ALREADY been restacked successfully. The
+// graph then claimed a base the branch no longer sat on, so the next restack
+// replayed commits it already contained and conflicted for no reason.
+func TestRestack_PersistsProgressWhenALaterBranchConflicts(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+
+	// Make `c` conflict with trunk by touching the same file trunk will move.
+	if err := c.Git.Checkout("c"); err != nil {
+		t.Fatal(err)
+	}
+	writeAndCommit(t, c, "clash.txt", "from c\n", "c edits clash.txt")
+
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatal(err)
+	}
+	writeAndCommit(t, c, "clash.txt", "from trunk\n", "trunk edits clash.txt")
+
+	// Restacking the whole stack: a and b succeed, c conflicts.
+	err := Restack(c, RestackOpts{Branch: trunk})
+	if err == nil {
+		t.Skip("expected a conflict on c; environment merged it cleanly")
+	}
+
+	g, gerr := c.Store.ReadGraph()
+	if gerr != nil {
+		t.Fatalf("read graph: %v", gerr)
+	}
+
+	// Whatever happened to c, the branches that DID move must be recorded at
+	// their new revisions — otherwise the next restack works from a stale base.
+	for _, name := range []string{"a", "b"} {
+		actual, rerr := c.Git.RevParse(name)
+		if rerr != nil {
+			t.Fatalf("rev-parse %s: %v", name, rerr)
+		}
+		if got := g.Branches[name].BranchRevision; got != actual {
+			t.Errorf("%s: graph records %s but git says %s — progress was discarded",
+				name, abbrev(got), abbrev(actual))
+		}
+	}
+
+	// And a's recorded parent revision must match trunk's tip, or the next
+	// restack replays a's commits onto a base it already has.
+	trunkRev, _ := c.Git.RevParse(trunk)
+	if got := g.Branches["a"].ParentBranchRevision; got != trunkRev {
+		t.Errorf("a: recorded parent %s, want trunk tip %s", abbrev(got), abbrev(trunkRev))
+	}
+}
+
+// writeAndCommit writes a file in the context's worktree and commits it.
+func writeAndCommit(t *testing.T, c *context.Context, name, content, msg string) {
+	t.Helper()
+	if err := os.WriteFile(c.Git.Dir+"/"+name, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	if _, err := c.Git.RunGitCapture("add", name); err != nil {
+		t.Fatalf("add %s: %v", name, err)
+	}
+	if err := c.Git.RunGit("commit", "-m", msg); err != nil {
+		t.Fatalf("commit %q: %v", msg, err)
+	}
+}

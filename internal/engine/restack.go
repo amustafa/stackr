@@ -232,6 +232,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 					skipped = append(skipped, skippedBranch{name, reason})
 					continue
 				}
+				_ = c.Store.WriteGraph(g)
 				return fmt.Errorf("cannot restack %s: %s", name, reason)
 			}
 
@@ -246,6 +247,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 					skipped = append(skipped, skippedBranch{name, reason})
 					continue
 				}
+				_ = c.Store.WriteGraph(g)
 				return fmt.Errorf("cannot restack %s: %s", name, reason)
 			}
 		} else {
@@ -256,6 +258,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 				// it never started at all (a precondition fatal). Only the
 				// former is a genuine, resumable conflict.
 				if !c.Git.IsRebaseInProgress() {
+					_ = c.Store.WriteGraph(g)
 					return fmt.Errorf("cannot restack %s onto %s: %w", name, b.ParentBranchName, err)
 				}
 				// Genuine merge conflict in the current worktree.
@@ -265,6 +268,15 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 					skipped = append(skipped, skippedBranch{name, "merge conflict"})
 					continue
 				}
+				// Persist what already succeeded before bailing out. Branches
+				// earlier in the loop have genuinely moved, and dropping their
+				// new revisions leaves the graph claiming a base that the branch
+				// no longer sits on — so the NEXT restack replays commits the
+				// branch already contains and conflicts for no reason.
+				if werr := c.Store.WriteGraph(g); werr != nil {
+					return werr
+				}
+
 				// Conflict — save state for `sr continue`.
 				rs := &store.RebaseState{
 					Operation:     "restack",
