@@ -10,6 +10,13 @@
       ],
       "description": "sr submit --aiprepare references the diff by command instead of embedding it"
     },
+    "am/fix-ai-spawn": {
+      "parentBranchName": "am/remove-bare-on-claude-call",
+      "parentBranchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
+      "branchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
+      "children": [],
+      "description": "sr --ai: fix OAuth auth, pipe the request instead of -p, and make it visible"
+    },
     "am/fix-move": {
       "parentBranchName": "main",
       "parentBranchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
@@ -22,7 +29,9 @@
       "parentBranchName": "am/aiprepare-diff-command",
       "parentBranchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
       "branchRevision": "b3dc53c51a55c4ff01e10bd38cb970028eeff2f3",
-      "children": []
+      "children": [
+        "am/fix-ai-spawn"
+      ]
     },
     "main": {
       "branchRevision": "f0d4eb0aedbe78b193ff7634a45229aa8fef06e8",
