@@ -283,3 +283,36 @@ func TestBuildAISystemPrompt_DescribesTheWholeJob(t *testing.T) {
 		}
 	}
 }
+
+// The prompt has to describe the multi-branch command, not the per-branch
+// checkout loop it replaced. An agent told to check each branch out will do
+// exactly that, one slow and interruptible PR at a time, and a run that dies
+// midway leaves a half-built stack --pr-meta's up-front validation exists to
+// prevent.
+func TestBuildAISystemPrompt_DirectsAtASingleSubmit(t *testing.T) {
+	prompt := BuildAISystemPrompt()
+
+	for _, want := range []string{"--pr-meta", "bodyFile", `"branch"`} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt never mentions %q", want)
+		}
+	}
+	if strings.Contains(prompt, "sr checkout <branch>") {
+		t.Error("prompt still tells the agent to check out each branch in turn")
+	}
+}
+
+// existingPR carries a PR's title but not its body, and submit will not
+// overwrite either. Asking the agent to judge whether a body "is clearly wrong"
+// would be asking for a decision on evidence it does not have — and an agent
+// that guesses rewrites a description it never read.
+func TestBuildAISystemPrompt_DoesNotAskTheAgentToJudgeAnUnseenBody(t *testing.T) {
+	prompt := BuildAISystemPrompt()
+
+	if !strings.Contains(prompt, "already have a PR out of the file") {
+		t.Error("prompt does not tell the agent to leave branches with a PR out of the payload")
+	}
+	if strings.Contains(prompt, "title or body is clearly wrong") {
+		t.Error("prompt still asks the agent to judge a body it cannot see")
+	}
+}

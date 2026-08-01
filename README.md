@@ -306,12 +306,53 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
                       prompting (the push is still lease-pinned)
     --no-force        Never force-push; fail instead
     --dry-run         Show what would be pushed, changing nothing
-    --title           PR title (skips interactive prompts)
+    --pr-meta         PR content as JSON, or a path to a file of JSON (repeatable)
+    --title           PR title for a single PR (shorthand for --pr-meta)
     --body            PR body (used with --title)
     --body-file       Read PR body from file (used with --title)
     --ai              Launch Claude to generate and submit PR
     --aiprepare       Output PR context as JSON (for agents)
 ```
+
+**Writing PRs for a whole stack: `--pr-meta`.** A submit pushes the current
+branch *and its downstack ancestors*, creating a PR for each one that lacks it.
+`--title`/`--body` can only describe one of those, so anything below the branch
+you are standing on either gets prompted for interactively or is pushed without
+a PR — a gap in the stack, where the PR above opens against a ref nobody
+reviews.
+
+`--pr-meta` addresses content per branch. Each entry is
+`{"branch", "title", "body" | "bodyFile", "draft"}`, and a value is either
+inline JSON or a path to a file of JSON, holding one object or an array:
+
+```bash
+# One file for the whole stack — the usual form for a generated submit.
+sr submit --stack --pr-meta prs.json
+
+# Inline, one branch at a time; repeatable.
+sr submit \
+  --pr-meta '{"branch":"feat/api","title":"Add the endpoint","bodyFile":"/tmp/api.md"}' \
+  --pr-meta '{"branch":"feat/ui","title":"Wire up the form","bodyFile":"/tmp/ui.md","draft":true}'
+```
+
+```json
+[
+  { "branch": "feat/api", "title": "Add the endpoint", "bodyFile": "/tmp/api.md" },
+  { "branch": "feat/ui",  "title": "Wire up the form", "bodyFile": "/tmp/ui.md", "draft": true }
+]
+```
+
+`"branch"` may be omitted only when the submit creates exactly one PR — the one
+case where there is nothing to be ambiguous about. With more than one, the same
+entry could belong to either, and labelling a branch with another branch's
+summary is worse than an error, because it survives review looking deliberate.
+
+`"draft"` overrides `--draft` for that branch, so one entry can opt out of an
+otherwise-draft submit.
+
+The whole payload is validated before any PR is created: a file that is wrong
+about its third branch costs you a message, not two PRs and a half-built stack
+to unpick. Branch names are checked earlier still, before anything is pushed.
 
 **Force pushing is automatic — and safe.** Restacking rewrites SHAs, so pushing a
 stacked branch nearly always needs a force push. Rather than making you decide
@@ -345,12 +386,15 @@ who depends on whom — and can't put back a reset or a cherry-pick.)
 
 **Three submit modes:**
 
-1. **Programmatic** — an agent gathers context with `sr submit --aiprepare`, then calls `sr submit --title "..." --body "..."` directly
+1. **Programmatic** — an agent gathers context with `sr submit --aiprepare`, then calls `sr submit --pr-meta prs.json` once for the whole stack
 2. **Bare interactive** — `sr submit` with no flags presents a wizard (Push only / Create PR)
 3. **Agent interactive** — `sr submit --ai` spawns a Claude session that generates and submits the PR autonomously
 
-The `--aiprepare` JSON carries the branch, its parent, its description, the
-recorded context entries, the commits and any existing PR — but *not* the diff.
+The `--aiprepare` JSON describes the whole job — one entry per branch the submit
+acts on, each with its parent, description, recorded context entries, commits
+and any existing PR, plus a `needsPR` flag on the gaps. It is the input side of
+`--pr-meta`: the agent reads one payload describing every branch and writes one
+back. What it does *not* carry is the diff.
 The patch is the one unbounded thing in there, and most PR descriptions never
 need it, so instead the JSON carries a `diffCommand` field: the `git diff`
 invocation that prints this branch's changes against its parent. The agent runs
@@ -544,7 +588,7 @@ Stackr is designed for both human and AI-driven development. Every workflow comm
 **The agent workflow:**
 1. Agent reads the branch state: `sr info`, `sr log`
 2. Agent sets context as it works: `sr context set`, `sr commit --context`
-3. Agent submits when ready: `sr submit --aiprepare` → craft PR → `sr submit --title "..." --body "..."`
+3. Agent submits when ready: `sr submit --aiprepare` → craft a PR per branch → `sr submit --pr-meta prs.json`
 4. Agent addresses review comments: `sr address-review --aiprepare` → make fixes → reply and resolve
 
 Context entries are the key integration point. They let the agent explain its reasoning in a structured way that persists across sessions and feeds into PR generation.
@@ -705,11 +749,19 @@ It also writes an always-on prompt to `.claude/prompts/stackr.md` and imports it
 For programmatic workflows (agents already in a session), use the two-step submit:
 
 ```bash
-# 1. Gather PR context as JSON
+# 1. Gather context for every branch the submit will act on
 sr submit --aiprepare
 
-# 2. Submit with title and body
-sr submit --title "Add auth middleware" --body "## Summary\n..."
+# 2. Write a body file per branch, then one payload naming them all
+cat > /tmp/prs.json <<'JSON'
+[
+  { "branch": "feat/api", "title": "Add auth middleware", "bodyFile": "/tmp/pr-api.md" },
+  { "branch": "feat/ui",  "title": "Gate the dashboard",  "bodyFile": "/tmp/pr-ui.md" }
+]
+JSON
+
+# 3. Create them all, bottom-up, in one command
+sr submit --pr-meta /tmp/prs.json
 ```
 
 For AI-driven submit, `sr submit --ai` spawns a Claude session that generates and submits the PR autonomously.
