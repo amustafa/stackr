@@ -42,7 +42,7 @@ type SubmitOpts struct {
 func Submit(c *context.Context, opts SubmitOpts) error {
 	// Mode 1a: --aiprepare outputs JSON context and exits.
 	if opts.AIPrepare {
-		return submitAIPrepare(c)
+		return submitAIPrepare(c, opts)
 	}
 
 	// Mode 3: --ai spawns a Claude session that owns the flow.
@@ -308,8 +308,17 @@ func reconcilePhase(c *context.Context, opts SubmitOpts, cfg *store.Config,
 		}
 	}
 
-	if err := ensurePR(c, opts, g, prInfo, current); err != nil {
-		return err
+	// Every branch that was pushed needs a PR, not just the one the user is
+	// standing on. A branch left without one is a hole in the stack: the PR
+	// above it is opened against a ref nobody is reviewing, and the GitHub stack
+	// chain — which is built from PRs — silently skips over it.
+	//
+	// pushed is bottom-up (see buildPushSet), so each base already has its PR by
+	// the time its child is created.
+	for _, name := range pushed {
+		if err := ensurePR(c, opts, g, prInfo, name, name == current); err != nil {
+			return err
+		}
 	}
 
 	syncGitHubStacks(g, prInfo, pushed, c.Quiet, c.Interactive)
@@ -323,43 +332,56 @@ func reconcilePhase(c *context.Context, opts SubmitOpts, cfg *store.Config,
 
 // ensurePR creates a pull request for the branch being submitted if it does not
 // already have one.
-func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store.PRInfo, current string) error {
-	b := g.Branches[current]
+// ensurePR makes sure branch has a PR, creating one if it does not.
+//
+// isTarget marks the branch the user actually invoked submit on. Only that
+// branch takes --title/--body: the user wrote one title and it describes one
+// change, so applying it to an ancestor would label that ancestor's PR with the
+// wrong summary. Ancestors are prompted for separately, or reported as gaps
+// when there is nobody to prompt.
+func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store.PRInfo, branch string, isTarget bool) error {
+	b := g.Branches[branch]
 	if b == nil || b.IsTrunk {
 		return nil
 	}
 
-	existing, err := ghPRForBranch(current)
+	existing, err := ghPRForBranch(branch)
 	if err != nil {
 		return fmt.Errorf("failed to check PR status: %w", err)
 	}
 	if existing != nil {
-		if prInfo.Branches[current] == nil {
-			prInfo.Branches[current] = &store.BranchPR{}
+		if prInfo.Branches[branch] == nil {
+			prInfo.Branches[branch] = &store.BranchPR{}
 		}
-		pr := prInfo.Branches[current]
+		pr := prInfo.Branches[branch]
 		pr.Number = existing.Number
 		pr.URL = existing.URL
 		pr.State = existing.State
 		pr.Title = existing.Title
 		pr.Draft = existing.Draft
 		if !c.Quiet {
-			fmt.Printf("PR #%d for %s (%s)\n", existing.Number, current, existing.URL)
+			fmt.Printf("PR #%d for %s (%s)\n", existing.Number, branch, existing.URL)
 		}
 		return nil
 	}
 
-	title, body := opts.Title, opts.Body
+	var title, body string
+	if isTarget {
+		title, body = opts.Title, opts.Body
+	}
 
 	if title == "" {
 		if !c.Interactive {
 			if !c.Quiet {
-				fmt.Println("Non-interactive mode: pushed without creating a PR")
+				fmt.Printf("No PR for %s and nothing to build one from — pushed without creating a PR.\n", branch)
+				if !isTarget {
+					fmt.Printf("  %s is a base for the branches above it; without a PR the stack has a gap there.\n", branch)
+				}
 			}
 			return nil
 		}
 
-		choice, err := ui.Select("No PR exists for "+current, []string{"Push only", "Create PR"})
+		choice, err := ui.Select("No PR exists for "+branch, []string{"Push only", "Create PR"})
 		if err != nil {
 			return err
 		}
@@ -395,7 +417,7 @@ func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store
 
 	result, err := ghCreatePR(GHCreateOpts{
 		Base:  b.ParentBranchName,
-		Head:  current,
+		Head:  branch,
 		Title: title,
 		Body:  body,
 		Draft: opts.Draft,
@@ -403,7 +425,7 @@ func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store
 	if err != nil {
 		return err
 	}
-	storePRResult(prInfo, current, b.ParentBranchName, result, opts.Draft)
+	storePRResult(prInfo, branch, b.ParentBranchName, result, opts.Draft)
 	if !c.Quiet {
 		fmt.Printf("Created PR #%d: %s\n", result.Number, result.URL)
 	}
@@ -411,8 +433,8 @@ func ensurePR(c *context.Context, opts SubmitOpts, g *graph.Graph, prInfo *store
 }
 
 // submitAIPrepare gathers context and outputs JSON to stdout.
-func submitAIPrepare(c *context.Context) error {
-	result, err := PrepareAI(c)
+func submitAIPrepare(c *context.Context, opts SubmitOpts) error {
+	result, err := PrepareAI(c, opts)
 	if err != nil {
 		return err
 	}
@@ -431,7 +453,7 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 		return fmt.Errorf("claude CLI not found — install it from https://claude.ai/code")
 	}
 
-	result, err := PrepareAI(c)
+	result, err := PrepareAI(c, opts)
 	if err != nil {
 		return err
 	}

@@ -37,6 +37,18 @@ func runEmittedCommand(t *testing.T, c *context.Context, command string) string 
 	return out
 }
 
+// branchEntry returns the job entry for a named branch.
+func branchEntry(t *testing.T, r *AIPrepareResult, name string) AIPrepareBranch {
+	t.Helper()
+	for _, e := range r.Branches {
+		if e.Branch == name {
+			return e
+		}
+	}
+	t.Fatalf("no entry for %q among %d branches in the job", name, len(r.Branches))
+	return AIPrepareBranch{}
+}
+
 // The JSON handed to an agent must not carry the patch — that was the whole
 // point of the field — and it must carry a command the agent can run instead.
 func TestPrepareAI_EmitsDiffCommandInsteadOfDiffContent(t *testing.T) {
@@ -50,7 +62,7 @@ func TestPrepareAI_EmitsDiffCommandInsteadOfDiffContent(t *testing.T) {
 	commitFile(t, c, "feature.txt", sentinel+"\n", "feat: add feature")
 	syncTip(t, c, "feature")
 
-	result, err := PrepareAI(c)
+	result, err := PrepareAI(c, SubmitOpts{})
 	if err != nil {
 		t.Fatalf("PrepareAI: %v", err)
 	}
@@ -73,20 +85,21 @@ func TestPrepareAI_EmitsDiffCommandInsteadOfDiffContent(t *testing.T) {
 		t.Error("aiprepare JSON still advertises a `diff` field")
 	}
 
-	if result.DiffCommand == nil {
+	entry := branchEntry(t, result, "feature")
+	if entry.DiffCommand == nil {
 		t.Fatal("no diffCommand emitted; the agent has no way to reach the patch")
 	}
-	if want := "git diff " + trunk + "..feature"; result.DiffCommand.Command != want {
-		t.Errorf("diffCommand.command = %q, want %q", result.DiffCommand.Command, want)
+	if want := "git diff " + trunk + "..feature"; entry.DiffCommand.Command != want {
+		t.Errorf("diffCommand.command = %q, want %q", entry.DiffCommand.Command, want)
 	}
-	if result.DiffCommand.Note == "" {
+	if entry.DiffCommand.Note == "" {
 		t.Error("diffCommand carries no note explaining what it returns")
 	}
 	if !strings.Contains(blob, `"diffCommand"`) {
 		t.Error("diffCommand missing from the marshalled JSON")
 	}
 
-	if got := runEmittedCommand(t, c, result.DiffCommand.Command); !strings.Contains(got, sentinel) {
+	if got := runEmittedCommand(t, c, entry.DiffCommand.Command); !strings.Contains(got, sentinel) {
 		t.Error("emitted command does not produce this branch's changes")
 	}
 }
@@ -134,14 +147,15 @@ func TestPrepareAI_DiffCommandMatchesDiffPatch(t *testing.T) {
 		t.Fatal("test setup is wrong: two-dot and three-dot ranges must differ here")
 	}
 
-	result, err := PrepareAI(c)
+	result, err := PrepareAI(c, SubmitOpts{})
 	if err != nil {
 		t.Fatalf("PrepareAI: %v", err)
 	}
-	if result.DiffCommand == nil {
+	entry := branchEntry(t, result, "b")
+	if entry.DiffCommand == nil {
 		t.Fatal("no diffCommand emitted")
 	}
-	if got := runEmittedCommand(t, c, result.DiffCommand.Command); got != want {
+	if got := runEmittedCommand(t, c, entry.DiffCommand.Command); got != want {
 		t.Errorf("emitted command does not reproduce DiffPatch output:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
@@ -179,5 +193,93 @@ func TestBuildAISystemPrompt_PointsAtDiffCommand(t *testing.T) {
 	}
 	if strings.Contains(prompt, "branch's info, diff, commits") {
 		t.Error("prompt still tells the model it was given the diff")
+	}
+}
+
+// A submit acts on the current branch and its downstack ancestors, so the JSON
+// must describe all of them. Describing only the current branch is what left an
+// agent writing one PR and leaving a hole underneath it.
+func TestPrepareAI_CoversTheWholeJobBottomUp(t *testing.T) {
+	stubGH(t)
+	c, _ := newBaseRepo(t)
+
+	for _, n := range []string{"a", "b", "c"} {
+		if err := Create(c, CreateOpts{Name: n}); err != nil {
+			t.Fatalf("create %s: %v", n, err)
+		}
+		commitFile(t, c, n+".txt", "from "+n+"\n", n+": work")
+		syncTip(t, c, n)
+	}
+
+	result, err := PrepareAI(c, SubmitOpts{})
+	if err != nil {
+		t.Fatalf("PrepareAI: %v", err)
+	}
+
+	if result.Target != "c" {
+		t.Errorf("target = %q, want c", result.Target)
+	}
+
+	var order []string
+	for _, e := range result.Branches {
+		order = append(order, e.Branch)
+	}
+	if strings.Join(order, ",") != "a,b,c" {
+		t.Fatalf("branches = %v, want [a b c] — bottom-up, so each parent precedes its child", order)
+	}
+
+	// Every entry must stand on its own: an agent writes one PR per branch and
+	// must not have to infer a branch's parent or commits from a sibling.
+	for _, e := range result.Branches {
+		if e.Parent == "" {
+			t.Errorf("%s has no parent recorded", e.Branch)
+		}
+		if e.DiffCommand == nil {
+			t.Errorf("%s has no diffCommand", e.Branch)
+		}
+		if len(e.Commits) == 0 {
+			t.Errorf("%s has no commits", e.Branch)
+		}
+	}
+}
+
+// needsPR is what tells the agent which branches are the gaps. With the gh stub
+// reporting no PR anywhere, every branch in the job is one.
+func TestPrepareAI_FlagsBranchesNeedingPRs(t *testing.T) {
+	stubGH(t)
+	c, _ := newBaseRepo(t)
+
+	for _, n := range []string{"a", "b"} {
+		if err := Create(c, CreateOpts{Name: n}); err != nil {
+			t.Fatalf("create %s: %v", n, err)
+		}
+		commitFile(t, c, n+".txt", "from "+n+"\n", n+": work")
+		syncTip(t, c, n)
+	}
+
+	result, err := PrepareAI(c, SubmitOpts{})
+	if err != nil {
+		t.Fatalf("PrepareAI: %v", err)
+	}
+	for _, e := range result.Branches {
+		if !e.NeedsPR {
+			t.Errorf("%s not flagged as needing a PR despite having none", e.Branch)
+		}
+		if e.ExistingPR != nil {
+			t.Errorf("%s reports an existing PR that does not exist", e.Branch)
+		}
+	}
+}
+
+// The prompt drives the whole job, so it must say that more than one PR may be
+// needed and in which order — an agent that stops after the target recreates
+// the exact gap this change exists to close.
+func TestBuildAISystemPrompt_DescribesTheWholeJob(t *testing.T) {
+	prompt := BuildAISystemPrompt()
+
+	for _, want := range []string{"needsPR", "branches", "bottom-up", "Do not stop after the target"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt never mentions %q", want)
+		}
 	}
 }

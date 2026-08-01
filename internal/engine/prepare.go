@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,13 +29,9 @@ type AIPrepareDiffCommand struct {
 	Note    string `json:"note"`
 }
 
-// AIPrepareResult holds all context an agent needs to craft a PR.
-type AIPrepareResult struct {
-	// Prompt carries the system prompt in --aiprepare mode, where the caller is
-	// an agent already in session and the JSON is all it gets. The --ai path
-	// leaves it empty because the same text is passed as --append-system-prompt,
-	// so omitempty keeps an empty key out of the payload piped to that session.
-	Prompt      string                `json:"prompt,omitempty"`
+// AIPrepareBranch is one branch of a submit job — everything needed to write
+// that branch's PR, on its own terms.
+type AIPrepareBranch struct {
 	Branch      string                `json:"branch"`
 	Parent      string                `json:"parent"`
 	Description string                `json:"description,omitempty"`
@@ -44,12 +39,49 @@ type AIPrepareResult struct {
 	Commits     []AIPrepareCommit     `json:"commits,omitempty"`
 	DiffCommand *AIPrepareDiffCommand `json:"diffCommand,omitempty"`
 	ExistingPR  *PRResult             `json:"existingPR,omitempty"`
-	PRTemplate  string                `json:"prTemplate,omitempty"`
+
+	// NeedsPR marks a branch with no PR yet. These are the gaps: a PR based on
+	// such a branch is opened against a ref nobody is reviewing, which is how a
+	// stack ends up with a hole in the middle.
+	NeedsPR bool `json:"needsPR"`
 }
 
-// PrepareAI gathers all the context needed to create or update a PR.
-func PrepareAI(c *context.Context) (*AIPrepareResult, error) {
+// AIPrepareResult describes the whole submit job, not just the branch the user
+// happens to be standing on.
+//
+// A submit acts on the current branch AND its downstack ancestors (plus the
+// upstack with --stack), and any of them may still be missing a PR. Describing
+// only the current branch left the agent unable to see the rest of the job it
+// was being asked to complete — it would write one PR and leave the stack with
+// a gap it was never told about.
+type AIPrepareResult struct {
+	// Prompt carries the system prompt in --aiprepare mode, where the caller is
+	// an agent already in session and the JSON is all it gets. The --ai path
+	// leaves it empty because the same text is passed as --append-system-prompt,
+	// so omitempty keeps an empty key out of the payload piped to that session.
+	Prompt string `json:"prompt,omitempty"`
+
+	// Target is the branch the user invoked submit on. It is the one branch
+	// --title/--body would apply to, and usually the one they care most about.
+	Target string `json:"target"`
+
+	// Branches covers the whole job, ordered bottom-up so a branch's parent
+	// always precedes it. Creating PRs in this order means every base already
+	// has a PR by the time its child is opened.
+	Branches   []AIPrepareBranch `json:"branches"`
+	PRTemplate string            `json:"prTemplate,omitempty"`
+}
+
+// PrepareAI gathers the context for every branch the submit would act on.
+//
+// It derives that set from buildPushSet — the same function Submit uses — so
+// the described job and the performed job cannot drift apart.
+func PrepareAI(c *context.Context, opts SubmitOpts) (*AIPrepareResult, error) {
 	g, err := c.Store.ReadGraph()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := c.Store.ReadConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -59,37 +91,46 @@ func PrepareAI(c *context.Context) (*AIPrepareResult, error) {
 		return nil, err
 	}
 
-	b := g.Branches[current]
-	if b == nil {
-		return nil, fmt.Errorf("branch %q not found in stack graph", current)
-	}
-	if b.IsTrunk {
-		return nil, fmt.Errorf("cannot submit trunk branch")
+	set, _, err := buildPushSet(c, g, cfg, opts, current)
+	if err != nil {
+		return nil, err
 	}
 
 	result := &AIPrepareResult{
-		Branch:      current,
-		Parent:      b.ParentBranchName,
-		Description: b.Description,
-		Context:     b.Context,
+		Target:     current,
+		PRTemplate: findPRTemplate(c),
 	}
 
-	result.DiffCommand = buildDiffCommand(b.ParentBranchName, current)
+	for _, name := range set {
+		b := g.Branches[name]
+		if b == nil || b.IsTrunk {
+			continue
+		}
 
-	commits, _ := c.Git.CommitsBetween(b.ParentBranchName, current)
-	for _, entry := range commits {
-		result.Commits = append(result.Commits, AIPrepareCommit{
-			SHA:     entry.SHA[:min(7, len(entry.SHA))],
-			Subject: entry.Subject,
-		})
+		entry := AIPrepareBranch{
+			Branch:      name,
+			Parent:      b.ParentBranchName,
+			Description: b.Description,
+			Context:     b.Context,
+			DiffCommand: buildDiffCommand(b.ParentBranchName, name),
+		}
+
+		commits, _ := c.Git.CommitsBetween(b.ParentBranchName, name)
+		for _, e := range commits {
+			entry.Commits = append(entry.Commits, AIPrepareCommit{
+				SHA:     e.SHA[:min(7, len(e.SHA))],
+				Subject: e.Subject,
+			})
+		}
+
+		if existing, _ := ghPRForBranch(name); existing != nil {
+			entry.ExistingPR = existing
+		} else {
+			entry.NeedsPR = true
+		}
+
+		result.Branches = append(result.Branches, entry)
 	}
-
-	existing, _ := ghPRForBranch(current)
-	if existing != nil {
-		result.ExistingPR = existing
-	}
-
-	result.PRTemplate = findPRTemplate(c)
 
 	return result, nil
 }
@@ -147,23 +188,23 @@ func findPRTemplate(c *context.Context) string {
 func BuildAISystemPrompt() string {
 	var b strings.Builder
 	b.WriteString("You are a PR submission assistant for stackr, a stacked-branch git workflow.\n\n")
-	b.WriteString("You are given JSON containing this branch's info, commits, context entries, and optionally an existing PR.\n\n")
+	b.WriteString("The JSON describes a whole submit job. `branches` lists every branch the submit acts on, ordered bottom-up so each branch's parent comes before it. `target` is the branch the user is standing on. Each entry carries that branch's description, commits, recorded context, any existing PR, and `needsPR`.\n\n")
+	b.WriteString("Every branch with `needsPR: true` must end up with a PR. A branch left without one becomes a hole in the stack: the PR above it is opened against a ref nobody is reviewing. Do not stop after the target.\n\n")
 	b.WriteString("The diff is NOT included — it would be the largest thing in the JSON and you often will not need it. ")
-	b.WriteString("The `diffCommand` field holds the command that prints this branch's full patch against its parent; run it yourself if the description, commits and context leave you unsure what actually changed.\n\n")
-	b.WriteString("This branch is ONE branch in a stack. It builds on its parent, and its parent is a separate PR reviewed on its own. ")
-	b.WriteString("Describe only THIS branch's change — do not summarize the whole stack or the parent's work. ")
+	b.WriteString("Each branch's `diffCommand` prints its full patch against its parent; run it for a branch whose description, commits and context leave you unsure what actually changed.\n\n")
+	b.WriteString("Each branch is reviewed on its own. Describe only THAT branch's change in its PR — do not summarize the whole stack or repeat a parent's work in a child's description. ")
 	b.WriteString("The `context` entries are design decisions the author recorded with `sr context`; use them to explain the why.\n\n")
 	b.WriteString("Your job:\n")
-	b.WriteString("1. Read the JSON carefully.\n")
-	b.WriteString("2. If an existing PR is present, note its current title and body — you may update or keep them.\n")
-	b.WriteString("3. Generate a concise PR title (no prefix like 'feat:' unless the project uses conventional commits).\n")
-	b.WriteString("4. Generate a PR body in markdown. If a prTemplate is provided, fill it in. Otherwise use:\n")
+	b.WriteString("1. Read the JSON carefully and list the branches with `needsPR: true`.\n")
+	b.WriteString("2. Work bottom-up, in the order `branches` gives you. Opening a child before its parent has a PR is what creates the hole.\n")
+	b.WriteString("3. For each such branch, generate a concise title (no prefix like 'feat:' unless the project uses conventional commits) and a body in markdown. If a prTemplate is provided, fill it in. Otherwise use:\n")
 	b.WriteString("   ## Summary\n   <what changed and why>\n\n   ## Changes\n   <bulleted list>\n\n   ## Test Plan\n   <how to verify>\n\n")
 	b.WriteString("   Describe the change in prose. Do NOT paste raw diffs or `git --stat` output into the body — keep it focused on what changed and why.\n\n")
-	b.WriteString("5. Run the following command to submit the PR:\n")
-	b.WriteString("   sr submit --title '<title>' --body '<body>'\n\n")
-	b.WriteString("   If the body is long, write it to a temp file and use:\n")
-	b.WriteString("   sr submit --title '<title>' --body-file /tmp/pr-body.md\n\n")
-	b.WriteString("6. After the command succeeds, you are done. Do not run any other commands.\n")
+	b.WriteString("4. Create each PR by checking the branch out and submitting it:\n")
+	b.WriteString("   sr checkout <branch>\n")
+	b.WriteString("   sr submit --title '<title>' --body-file /tmp/pr-<branch>.md\n\n")
+	b.WriteString("   Write each body to its own temp file — bodies are long and quoting them inline breaks on backticks and newlines.\n\n")
+	b.WriteString("5. Where a branch already has a PR, leave it alone unless its title or body is clearly wrong for what the branch now contains.\n")
+	b.WriteString("6. Return to the target branch with `sr checkout <target>` when you are done, then stop. Do not run any other commands.\n")
 	return b.String()
 }
