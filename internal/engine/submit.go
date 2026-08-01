@@ -450,20 +450,15 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 		goal += ". Mark the PR as a draft (add --draft flag)"
 	}
 
-	// Deliberately no --bare. It is tempting here — it skips hooks, plugin sync
-	// and CLAUDE.md auto-discovery, which is what you want for a scripted
-	// one-shot — but it also refuses to read OAuth or the keychain, taking
-	// credentials strictly from ANTHROPIC_API_KEY or an apiKeyHelper. Users
-	// logged in with `claude /login` have neither, so --bare makes this command
-	// fail with "Not logged in" for everyone on a subscription.
-	args := []string{
-		"-p", goal,
-		"--allowedTools", "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *)",
-		"--append-system-prompt", systemPrompt,
+	allowedTools := "Read,Edit,Bash(sr *),Bash(git *),Bash(gh *)"
+	request := buildAIRequest(goal, data)
+
+	if c.Debug || opts.DryRun {
+		echoAIRequest("submit", allowedTools, systemPrompt, request)
 	}
 
-	cmd := exec.Command("claude", args...)
-	cmd.Stdin = strings.NewReader(string(data))
+	cmd := exec.Command("claude", claudeAgentArgs(allowedTools, systemPrompt)...)
+	cmd.Stdin = strings.NewReader(request)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -472,6 +467,50 @@ func submitAI(c *context.Context, opts SubmitOpts) error {
 	}
 
 	return cmd.Run()
+}
+
+// buildAIRequest joins the goal and its JSON context into the single message
+// piped to the spawned session.
+//
+// The goal used to travel as a `-p <string>` argument while the JSON came in on
+// stdin, which split one request across two channels: the prompt was subject to
+// argv length limits and shell quoting, and nothing tied the two halves
+// together. Piping the whole thing keeps it one document, and `claude` runs
+// non-interactively on its own when stdin is not a TTY, so no print flag is
+// needed to get there.
+func buildAIRequest(goal string, contextJSON []byte) string {
+	return goal + "\n\n" + string(contextJSON) + "\n"
+}
+
+// claudeAgentArgs builds the argv for a spawned Claude session.
+//
+// Deliberately no --bare. It is tempting — it skips hooks, plugin sync and
+// CLAUDE.md auto-discovery, which is what you want for a scripted one-shot —
+// but it also refuses to read OAuth or the keychain, taking credentials
+// strictly from ANTHROPIC_API_KEY or an apiKeyHelper. Anyone signed in with
+// `claude /login` has neither, so --bare fails with "Not logged in" for every
+// user on a subscription.
+func claudeAgentArgs(allowedTools, systemPrompt string) []string {
+	return []string{
+		"--allowedTools", allowedTools,
+		"--append-system-prompt", systemPrompt,
+	}
+}
+
+// echoAIRequest prints everything about to be handed to the spawned session:
+// the tools it may use, the appended system prompt, and the piped request.
+//
+// Without this the only visible output is the agent's own, which makes a
+// surprising run impossible to attribute — you cannot tell whether the agent
+// reasoned badly or was handed the wrong context, because the context was never
+// shown. It goes to stderr so stdout stays usable for whatever the agent emits.
+func echoAIRequest(command, allowedTools, systemPrompt, request string) {
+	w := os.Stderr
+	fmt.Fprintf(w, "\n--- sr %s --ai: request to claude ---\n", command)
+	fmt.Fprintf(w, "allowedTools:\n%s\n\n", allowedTools)
+	fmt.Fprintf(w, "appended system prompt:\n%s\n", systemPrompt)
+	fmt.Fprintf(w, "piped request:\n%s", request)
+	fmt.Fprintf(w, "--- end request ---\n\n")
 }
 
 // storePRResult updates local PR metadata from a GitHub PR result.

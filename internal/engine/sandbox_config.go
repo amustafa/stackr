@@ -29,16 +29,16 @@ func SandboxConfigAI(c *context.Context) error {
 	goal := "/goal the sandbox configuration reflects the user's stated intent. " +
 		"Read the current config from stdin, discuss changes, and apply them with " +
 		"`sr sandbox config` or by editing config values."
-	// No --bare — it reads credentials only from ANTHROPIC_API_KEY or an
-	// apiKeyHelper, never OAuth or the keychain, so it fails with "Not logged
-	// in" for anyone signed in via `claude /login`. See submitAI.
-	args := []string{
-		"-p", goal,
-		"--allowedTools", "Read,Edit,Bash(sr sandbox config *)",
-		"--append-system-prompt", sandboxConfigSystemPrompt(),
+	allowedTools := "Read,Edit,Bash(sr sandbox config *)"
+	systemPrompt := sandboxConfigSystemPrompt()
+	request := buildAIRequest(goal, data)
+
+	if c.Debug {
+		echoAIRequest("sandbox config", allowedTools, systemPrompt, request)
 	}
-	cmd := exec.Command("claude", args...)
-	cmd.Stdin = strings.NewReader(string(data))
+
+	cmd := exec.Command("claude", claudeAgentArgs(allowedTools, systemPrompt)...)
+	cmd.Stdin = strings.NewReader(request)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !c.Quiet {
