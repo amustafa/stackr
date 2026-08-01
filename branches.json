@@ -30,9 +30,23 @@
     "am/ghstack-reconcile": {
       "parentBranchName": "am/submit-covers-every-branch",
       "parentBranchRevision": "e87b718fa6e023a4236a6245226ce8233c643be9",
-      "branchRevision": "e87b718fa6e023a4236a6245226ce8233c643be9",
+      "branchRevision": "1ec9e58311c551c034cd43a0acd3f842b7eab829",
       "children": [],
-      "description": "Reconcile GitHub stacks against GitHub's own grouping, not a local cache"
+      "description": "Reconcile GitHub stacks against GitHub's own grouping, not a local cache",
+      "commitContexts": {
+        "1ec9e58": [
+          {
+            "key": "ghstack-source-of-truth",
+            "text": "GitHub is the authority on PR grouping; pr_info.json StackNumber is a display cache. Reconciling against the cache made one transient failure permanently unrecoverable, because a lost number is indistinguishable from an ungrouped PR.",
+            "sources": [
+              {
+                "type": "file",
+                "reference": "internal/engine/ghstack.go"
+              }
+            ]
+          }
+        ]
+      }
     },
     "am/remove-bare-on-claude-call": {
       "parentBranchName": "am/aiprepare-diff-command",
