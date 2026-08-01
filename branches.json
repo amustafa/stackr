@@ -4,7 +4,7 @@
     "am/fix-move": {
       "parentBranchName": "submit-preflight",
       "parentBranchRevision": "6ed0085310d44d56e62915aa8f5b117cb059db08",
-      "branchRevision": "6ed0085310d44d56e62915aa8f5b117cb059db08",
+      "branchRevision": "6eb582a786ba7b1eba383b8f44ee33df53b551d6",
       "children": []
     },
     "gh-stacks-api": {
