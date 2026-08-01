@@ -349,6 +349,13 @@ who depends on whom — and can't put back a reset or a cherry-pick.)
 2. **Bare interactive** — `sr submit` with no flags presents a wizard (Push only / Create PR)
 3. **Agent interactive** — `sr submit --ai` spawns a Claude session that generates and submits the PR autonomously
 
+The `--aiprepare` JSON carries the branch, its parent, its description, the
+recorded context entries, the commits and any existing PR — but *not* the diff.
+The patch is the one unbounded thing in there, and most PR descriptions never
+need it, so instead the JSON carries a `diffCommand` field: the `git diff`
+invocation that prints this branch's changes against its parent. The agent runs
+it only if it decides it has to see the code.
+
 ### Address Review
 
 | Command | Description |

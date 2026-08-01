@@ -16,17 +16,31 @@ type AIPrepareCommit struct {
 	Subject string `json:"subject"`
 }
 
+// AIPrepareDiffCommand points the consumer at the branch's diff instead of
+// carrying it.
+//
+// The patch is by far the largest thing we could put in this JSON and the
+// consumer is an agent with a finite context window. Most PR descriptions can
+// be written from the description, commits and recorded context alone, so
+// embedding the patch taxed every caller for something only some of them
+// needed. Handing over the command lets the agent pay that cost only when it
+// decides it has to see the changes.
+type AIPrepareDiffCommand struct {
+	Command string `json:"command"`
+	Note    string `json:"note"`
+}
+
 // AIPrepareResult holds all context an agent needs to craft a PR.
 type AIPrepareResult struct {
-	Prompt      string               `json:"prompt"`
-	Branch      string               `json:"branch"`
-	Parent      string               `json:"parent"`
-	Description string               `json:"description,omitempty"`
+	Prompt      string                `json:"prompt"`
+	Branch      string                `json:"branch"`
+	Parent      string                `json:"parent"`
+	Description string                `json:"description,omitempty"`
 	Context     []graph.BranchContext `json:"context,omitempty"`
-	Commits     []AIPrepareCommit    `json:"commits,omitempty"`
-	Diff        string               `json:"diff,omitempty"`
-	ExistingPR  *PRResult            `json:"existingPR,omitempty"`
-	PRTemplate  string               `json:"prTemplate,omitempty"`
+	Commits     []AIPrepareCommit     `json:"commits,omitempty"`
+	DiffCommand *AIPrepareDiffCommand `json:"diffCommand,omitempty"`
+	ExistingPR  *PRResult             `json:"existingPR,omitempty"`
+	PRTemplate  string                `json:"prTemplate,omitempty"`
 }
 
 // PrepareAI gathers all the context needed to create or update a PR.
@@ -56,8 +70,7 @@ func PrepareAI(c *context.Context) (*AIPrepareResult, error) {
 		Context:     b.Context,
 	}
 
-	diffPatch, _ := c.Git.DiffPatch(b.ParentBranchName, current)
-	result.Diff = diffPatch
+	result.DiffCommand = buildDiffCommand(b.ParentBranchName, current)
 
 	commits, _ := c.Git.CommitsBetween(b.ParentBranchName, current)
 	for _, entry := range commits {
@@ -75,6 +88,31 @@ func PrepareAI(c *context.Context) (*AIPrepareResult, error) {
 	result.PRTemplate = findPRTemplate(c)
 
 	return result, nil
+}
+
+// buildDiffCommand renders the command that reproduces the patch this result
+// used to embed. The revision range must stay identical to the one
+// git.DiffPatch runs (two-dot, parent..branch) — a three-dot range would show
+// the branch against the merge base instead of against the parent's tip, which
+// is a different change set the moment the parent moves ahead.
+func buildDiffCommand(parent, branch string) *AIPrepareDiffCommand {
+	return &AIPrepareDiffCommand{
+		Command: "git diff " + shellArg(parent+".."+branch),
+		Note: "The diff is not included in this JSON to keep it small. " +
+			"Run this command to see the full patch of this branch against its parent.",
+	}
+}
+
+// shellArg quotes s only when it holds something a shell would interpret.
+// Branch names are almost always plain, and an unquoted `git diff a..b` is the
+// command a human would type — quoting every name would make the common case
+// harder to read for no gain.
+func shellArg(s string) string {
+	const safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/@+-"
+	if s != "" && strings.Trim(s, safe) == "" {
+		return s
+	}
+	return shellQuote(s)
 }
 
 func findPRTemplate(c *context.Context) string {
@@ -105,7 +143,9 @@ func findPRTemplate(c *context.Context) string {
 func BuildAISystemPrompt() string {
 	var b strings.Builder
 	b.WriteString("You are a PR submission assistant for stackr, a stacked-branch git workflow.\n\n")
-	b.WriteString("You are given JSON containing this branch's info, diff, commits, context entries, and optionally an existing PR.\n\n")
+	b.WriteString("You are given JSON containing this branch's info, commits, context entries, and optionally an existing PR.\n\n")
+	b.WriteString("The diff is NOT included — it would be the largest thing in the JSON and you often will not need it. ")
+	b.WriteString("The `diffCommand` field holds the command that prints this branch's full patch against its parent; run it yourself if the description, commits and context leave you unsure what actually changed.\n\n")
 	b.WriteString("This branch is ONE branch in a stack. It builds on its parent, and its parent is a separate PR reviewed on its own. ")
 	b.WriteString("Describe only THIS branch's change — do not summarize the whole stack or the parent's work. ")
 	b.WriteString("The `context` entries are design decisions the author recorded with `sr context`; use them to explain the why.\n\n")
