@@ -15,7 +15,7 @@
       "parentBranchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
       "branchRevision": "6493a1fe6eaa2dc5e079a651e50bf42664fa438a",
       "children": [],
-      "description": "sr --ai: fix OAuth auth, pipe the request instead of -p, and make it visible"
+      "description": "Pipe the request to spawned Claude sessions instead of -p, and surface it under --debug/--dry-run"
     },
     "am/fix-move": {
       "parentBranchName": "main",
