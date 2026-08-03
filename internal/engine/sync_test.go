@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
@@ -92,20 +94,23 @@ func TestCleanMergedBranches_RemovesWorktreeOfMergedBranch(t *testing.T) {
 	}
 }
 
-// When sync runs from inside the very worktree holding the branch that just
-// got merged, cleanMergedBranches can't remove that worktree: Sync's earlier
-// checkout to trunk has already repurposed it, and a running process can't
-// delete the directory it's executing in. Sync must at least say so instead
-// of silently leaving a stale trunk checkout with no explanation.
-func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
+// setupSquashMergedFeatureWorktree builds the shape that both worktree-sync
+// tests need: a "feature" branch living in its own worktree, tracked in the
+// graph, whose work has already been squash-merged onto remote main and whose
+// remote branch is gone — exactly what a merged-and-deleted GitHub PR leaves
+// behind. The primary checkout is left on main; callers move it if the case
+// under test needs trunk free.
+func setupSquashMergedFeatureWorktree(t *testing.T) (c *context.Context, featureCtx *context.Context, wtDir string) {
+	t.Helper()
+
 	c, remoteDir := setupGetTestEnv(t)
 
-	wtDir := t.TempDir()
+	wtDir = t.TempDir()
 	if _, err := c.Git.RunGitCapture("worktree", "add", wtDir, "-b", "feature", "main"); err != nil {
 		t.Fatalf("worktree add: %v", err)
 	}
 
-	featureCtx := &context.Context{Git: &git.Runner{Dir: wtDir}, Store: c.Store, Quiet: false}
+	featureCtx = &context.Context{Git: &git.Runner{Dir: wtDir}, Store: c.Store, Quiet: false}
 	commitFile(t, featureCtx, "feature.txt", "the feature", "feat: add feature")
 	if err := featureCtx.Git.RunGit("push", "-u", "origin", "feature"); err != nil {
 		t.Fatalf("push feature: %v", err)
@@ -122,13 +127,6 @@ func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
 	}
 	if err := c.Store.WriteGraph(g); err != nil {
 		t.Fatalf("write graph: %v", err)
-	}
-
-	// Free up "main" in the primary checkout so the feature worktree's own
-	// sync can check it out — mirroring a primary checkout that's on some
-	// other branch when the feature worktree runs its own sync.
-	if err := c.Git.RunGit("checkout", "-b", "other-work"); err != nil {
-		t.Fatalf("checkout other-work: %v", err)
 	}
 
 	// Simulate GitHub's "Squash and merge": push the equivalent content to
@@ -155,6 +153,25 @@ func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
 	if err := mergeRunner.RunGit("push", "origin", "--delete", "feature"); err != nil {
 		t.Fatalf("delete remote feature: %v", err)
 	}
+	return c, featureCtx, wtDir
+}
+
+// When sync runs from inside the very worktree holding the branch that just
+// got merged, cleanMergedBranches can't remove that worktree: a running process
+// can't delete the directory it's executing in. It vacates the branch instead,
+// and sync must say so rather than silently leaving a stale checkout with no
+// explanation.
+//
+// Here trunk is free, so vacating lands the worktree on trunk itself.
+func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
+	c, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+
+	// Free up "main" in the primary checkout so the feature worktree's own
+	// sync can check it out — mirroring a primary checkout that's on some
+	// other branch when the feature worktree runs its own sync.
+	if err := c.Git.RunGit("checkout", "-b", "other-work"); err != nil {
+		t.Fatalf("checkout other-work: %v", err)
+	}
 
 	// Now sync from inside the feature worktree itself — the exact scenario
 	// that left a stale worktree behind in practice.
@@ -168,6 +185,66 @@ func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
 		t.Errorf("expected feature worktree to end up on main, got %q", branch)
 	}
 	if !bytes.Contains([]byte(out), []byte("feature")) || !bytes.Contains([]byte(out), []byte("sr worktree remove")) {
+		t.Errorf("expected sync to note the stale worktree, got output:\n%s", out)
+	}
+}
+
+// Trunk can only be fast-forwarded inside the worktree that holds it, so that
+// worktree's state can block the update. Everything downstream measures against
+// trunk — which branches have landed, what the stack rebases onto — so sync
+// stops and says which worktree is in the way rather than quietly doing less
+// than asked and reporting success.
+func TestSync_FailsWhenTrunkWorktreeBlocksFastForward(t *testing.T) {
+	c, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+
+	// The primary checkout holds main and has an untracked feature.txt, which
+	// the incoming squash commit adds — git refuses to fast-forward over it.
+	root := c.Git.Dir
+	if err := os.WriteFile(filepath.Join(root, "feature.txt"), []byte("local scratch"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	err := Sync(featureCtx, SyncOpts{})
+	if err == nil {
+		t.Fatal("expected sync to fail when trunk's worktree blocks the fast-forward")
+	}
+	if !strings.Contains(err.Error(), root) {
+		t.Errorf("error should name the blocking worktree %s, got: %v", root, err)
+	}
+	if exists, _ := featureCtx.Git.BranchExists("feature"); !exists {
+		t.Error("sync deleted the merged branch despite failing to update trunk")
+	}
+}
+
+// The ordinary shape of a stackr repo: the primary checkout sits on trunk while
+// feature branches live in worktrees. Sync used to open by checking out trunk
+// unconditionally, so running it from a worktree died on git's "'main' is
+// already used by worktree" before it fetched, restacked, or cleaned anything —
+// and the merged branch survived. Sync must complete without ever claiming
+// trunk here, vacating this worktree by detaching instead.
+func TestSync_FromWorktreeWhileTrunkCheckedOutElsewhere(t *testing.T) {
+	_, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+
+	// Primary checkout stays on main — no freeing trunk this time.
+	out := captureStdout(t, func() {
+		if err := Sync(featureCtx, SyncOpts{}); err != nil {
+			t.Fatalf("Sync from worktree while trunk is checked out elsewhere: %v", err)
+		}
+	})
+
+	if exists, _ := featureCtx.Git.BranchExists("feature"); exists {
+		t.Error("merged branch survived sync run from its own worktree")
+	}
+	// Trunk belongs to the primary checkout, so this worktree can only detach.
+	if branch, err := featureCtx.Git.CurrentBranch(); err == nil {
+		t.Errorf("expected detached HEAD, got branch %q", branch)
+	}
+	head, _ := featureCtx.Git.RevParse("HEAD")
+	trunkRev, _ := featureCtx.Git.RevParse("main")
+	if head != trunkRev {
+		t.Errorf("expected worktree detached at trunk %s, got %s", trunkRev, head)
+	}
+	if !bytes.Contains([]byte(out), []byte("sr worktree remove")) {
 		t.Errorf("expected sync to note the stale worktree, got output:\n%s", out)
 	}
 }
