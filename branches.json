@@ -31,6 +31,10 @@
         {
           "key": "risk",
           "text": "Not claiming trunk means a merged current branch can no longer be deleted out from under us, so cleanMergedBranches now vacates first: checkout trunk when free, else 'checkout --detach trunk', which succeeds even when another worktree owns the trunk ref."
+        },
+        {
+          "key": "decision",
+          "text": "When the fast-forward is blocked inside trunk's own worktree, sync hard-fails and names the blocking path rather than continuing on a stale trunk. Everything downstream measures against trunk (which branches landed, what the stack rebases onto), so proceeding would quietly do less than asked while reporting success. Chosen by the repo owner over warn-and-continue."
         }
       ]
     },
