@@ -6,7 +6,19 @@
       "parentBranchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
       "branchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
       "children": [],
-      "description": "Make sr sync work from a worktree when trunk is checked out elsewhere"
+      "description": "Make sr sync work from a worktree when trunk is checked out elsewhere",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Route the trunk fast-forward by where trunk is actually checked out, instead of claiming it in the current worktree. Sync used to open with an unconditional 'git checkout \u003ctrunk\u003e', which fails with \"already used by worktree\" in the ordinary stackr layout (primary checkout on trunk, features in worktrees) — killing sync before it fetched, restacked or cleaned anything.",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/sync.go"
+            }
+          ]
+        }
+      ]
     },
     "main": {
       "branchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
