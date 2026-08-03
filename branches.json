@@ -17,6 +17,16 @@
               "reference": "internal/engine/sync.go"
             }
           ]
+        },
+        {
+          "key": "design",
+          "text": "Three cases in fastForwardTrunk: merge --ff-only here when trunk is checked out here; run the same merge inside the owning worktree when another holds it (git refuses ref updates to a branch checked out elsewhere — mirrors restack.go:239); otherwise 'git fetch . origin/trunk:trunk' to move the ref with no checkout at all, preserving fast-forward-only safety.",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/sync.go"
+            }
+          ]
         }
       ]
     },
