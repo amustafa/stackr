@@ -3,8 +3,8 @@
   "branches": {
     "am/error-reporting": {
       "parentBranchName": "main",
-      "parentBranchRevision": "55b8f420c1e60ce9c81047e566927e73571127b4",
-      "branchRevision": "55b8f420c1e60ce9c81047e566927e73571127b4",
+      "parentBranchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
+      "branchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
       "children": [],
       "description": "Opt-in automatic GitHub issue filing for unexpected stackr errors, with noise suppression"
     },
