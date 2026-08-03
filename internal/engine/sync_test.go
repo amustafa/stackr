@@ -94,16 +94,16 @@ func TestCleanMergedBranches_RemovesWorktreeOfMergedBranch(t *testing.T) {
 	}
 }
 
-// setupSquashMergedFeatureWorktree builds the shape that both worktree-sync
-// tests need: a "feature" branch living in its own worktree, tracked in the
+// setupSquashMergedFeatureWorktree builds the shape the worktree-sync tests
+// need: a "feature" branch living in its own worktree, tracked in the
 // graph, whose work has already been squash-merged onto remote main and whose
 // remote branch is gone — exactly what a merged-and-deleted GitHub PR leaves
 // behind. The primary checkout is left on main; callers move it if the case
 // under test needs trunk free.
-func setupSquashMergedFeatureWorktree(t *testing.T) (c *context.Context, featureCtx *context.Context, wtDir string) {
+func setupSquashMergedFeatureWorktree(t *testing.T) (c *context.Context, featureCtx *context.Context, wtDir, remoteDir string) {
 	t.Helper()
 
-	c, remoteDir := setupGetTestEnv(t)
+	c, remoteDir = setupGetTestEnv(t)
 
 	wtDir = t.TempDir()
 	if _, err := c.Git.RunGitCapture("worktree", "add", wtDir, "-b", "feature", "main"); err != nil {
@@ -153,7 +153,7 @@ func setupSquashMergedFeatureWorktree(t *testing.T) (c *context.Context, feature
 	if err := mergeRunner.RunGit("push", "origin", "--delete", "feature"); err != nil {
 		t.Fatalf("delete remote feature: %v", err)
 	}
-	return c, featureCtx, wtDir
+	return c, featureCtx, wtDir, remoteDir
 }
 
 // When sync runs from inside the very worktree holding the branch that just
@@ -164,7 +164,7 @@ func setupSquashMergedFeatureWorktree(t *testing.T) (c *context.Context, feature
 //
 // Here trunk is free, so vacating lands the worktree on trunk itself.
 func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
-	c, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+	c, featureCtx, _, _ := setupSquashMergedFeatureWorktree(t)
 
 	// Free up "main" in the primary checkout so the feature worktree's own
 	// sync can check it out — mirroring a primary checkout that's on some
@@ -195,7 +195,7 @@ func TestSync_NotesStaleWorktreeWhenOwnBranchMerges(t *testing.T) {
 // stops and says which worktree is in the way rather than quietly doing less
 // than asked and reporting success.
 func TestSync_FailsWhenTrunkWorktreeBlocksFastForward(t *testing.T) {
-	c, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+	c, featureCtx, _, _ := setupSquashMergedFeatureWorktree(t)
 
 	// The primary checkout holds main and has an untracked feature.txt, which
 	// the incoming squash commit adds — git refuses to fast-forward over it.
@@ -208,8 +208,15 @@ func TestSync_FailsWhenTrunkWorktreeBlocksFastForward(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected sync to fail when trunk's worktree blocks the fast-forward")
 	}
-	if !strings.Contains(err.Error(), root) {
-		t.Errorf("error should name the blocking worktree %s, got: %v", root, err)
+	// git reports its own canonical path for a worktree, which differs from
+	// t.TempDir() whenever TMPDIR is a symlink — as /tmp effectively is on
+	// macOS. Compare resolved paths, the way sameWorktree does.
+	blocking := root
+	if resolved, rerr := filepath.EvalSymlinks(root); rerr == nil {
+		blocking = resolved
+	}
+	if !strings.Contains(err.Error(), blocking) {
+		t.Errorf("error should name the blocking worktree %s, got: %v", blocking, err)
 	}
 	if exists, _ := featureCtx.Git.BranchExists("feature"); !exists {
 		t.Error("sync deleted the merged branch despite failing to update trunk")
@@ -223,7 +230,7 @@ func TestSync_FailsWhenTrunkWorktreeBlocksFastForward(t *testing.T) {
 // and the merged branch survived. Sync must complete without ever claiming
 // trunk here, vacating this worktree by detaching instead.
 func TestSync_FromWorktreeWhileTrunkCheckedOutElsewhere(t *testing.T) {
-	_, featureCtx, _ := setupSquashMergedFeatureWorktree(t)
+	_, featureCtx, _, _ := setupSquashMergedFeatureWorktree(t)
 
 	// Primary checkout stays on main — no freeing trunk this time.
 	out := captureStdout(t, func() {
@@ -246,5 +253,61 @@ func TestSync_FromWorktreeWhileTrunkCheckedOutElsewhere(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(out), []byte("sr worktree remove")) {
 		t.Errorf("expected sync to note the stale worktree, got output:\n%s", out)
+	}
+}
+
+// A merged branch may refuse to let go: if vacating the current worktree fails,
+// git still holds the branch. Sync must leave it tracked rather than report it
+// cleaned — dropping it from the graph while it lives on in git strands it,
+// invisible to `sr log` and restacked by nothing.
+func TestSync_KeepsBranchTrackedWhenVacateIsBlocked(t *testing.T) {
+	c, featureCtx, wtDir, remoteDir := setupSquashMergedFeatureWorktree(t)
+
+	// Put a file on trunk that the feature worktree holds as *untracked*
+	// content. Vacating that worktree onto trunk would overwrite it, so git
+	// refuses the checkout — the branch stays checked out and undeletable.
+	blockerDir := t.TempDir()
+	blocker := &git.Runner{Dir: blockerDir}
+	blocker.RunGitCapture("clone", remoteDir, ".")
+	blocker.RunGitCapture("config", "user.email", "test@test.com")
+	blocker.RunGitCapture("config", "user.name", "Test")
+	if err := blocker.RunGit("checkout", "main"); err != nil {
+		t.Fatalf("checkout main: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blockerDir, "blocker.txt"), []byte("from trunk"), 0o644); err != nil {
+		t.Fatalf("write blocker on trunk: %v", err)
+	}
+	blocker.RunGitCapture("add", "blocker.txt")
+	if err := blocker.RunGit("commit", "-m", "add blocker"); err != nil {
+		t.Fatalf("commit blocker: %v", err)
+	}
+	if err := blocker.RunGit("push", "origin", "main"); err != nil {
+		t.Fatalf("push blocker: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wtDir, "blocker.txt"), []byte("local scratch"), 0o644); err != nil {
+		t.Fatalf("write untracked blocker in worktree: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := Sync(featureCtx, SyncOpts{}); err != nil {
+			t.Fatalf("Sync should not fail over one unvacatable branch: %v", err)
+		}
+	})
+
+	if !bytes.Contains([]byte(out), []byte("could not be vacated")) {
+		t.Errorf("expected sync to report the blocked vacate, got output:\n%s", out)
+	}
+	if bytes.Contains([]byte(out), []byte("Cleaned up merged branch: feature")) {
+		t.Errorf("sync reported a branch cleaned that git still holds, output:\n%s", out)
+	}
+	if exists, _ := featureCtx.Git.BranchExists("feature"); !exists {
+		t.Error("branch was deleted despite the vacate failing")
+	}
+	g, err := c.Store.ReadGraph()
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	if !g.Has("feature") {
+		t.Error("branch was dropped from the graph while it still exists in git — stranded")
 	}
 }

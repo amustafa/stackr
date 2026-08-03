@@ -192,14 +192,15 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 			b.BranchRevision = tip
 		}
 
-		if err := g.RemoveBranch(name); err != nil {
-			continue
-		}
-
 		// A branch checked out anywhere can't be force-deleted — git refuses —
 		// and even where it could, the worktree would be left behind as a
 		// checkout of a branch that no longer exists in the graph. Which
 		// worktree holds it decides what to do about that.
+		//
+		// Every failure below leaves the branch tracked and bails out. Git has
+		// to let go of the branch before the graph does: reporting it cleaned
+		// while git still holds it strands it — dropped from the graph, alive on
+		// disk, restacked by nothing, and invisible to `sr log`.
 		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" {
 			if sameWorktree(wtPath, c.Git.Dir) {
 				// The worktree we're running from. A process can't delete the
@@ -212,19 +213,37 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 				if trunkWt, terr := c.Git.WorktreeForBranch(trunk); terr == nil && trunkWt != "" {
 					vacate = []string{"checkout", "--detach", trunk}
 				}
-				if err := c.Git.RunGit(vacate...); err != nil && !c.Quiet {
-					fmt.Printf("Note: %s is merged but checked out here and could not be vacated (%v); leaving the branch in place\n", name, err)
+				if err := c.Git.RunGit(vacate...); err != nil {
+					if !c.Quiet {
+						fmt.Printf("Note: %s is merged but checked out here and could not be vacated (%v); leaving the branch in place\n", name, err)
+					}
+					continue
 				}
-			} else if rmErr := c.Git.WorktreeRemove(wtPath); rmErr == nil {
+			} else if rmErr := c.Git.WorktreeRemove(wtPath); rmErr != nil {
 				if !c.Quiet {
-					fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+					fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
 				}
+				continue
 			} else if !c.Quiet {
-				fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+				fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
 			}
 		}
 
-		_ = c.Git.DeleteBranch(name, true)
+		if err := c.Git.DeleteBranch(name, true); err != nil {
+			if !c.Quiet {
+				fmt.Printf("Note: %s is merged but could not be deleted (%v); leaving it tracked\n", name, err)
+			}
+			continue
+		}
+
+		// Only now that git has released the branch may it leave the graph.
+		// RemoveBranch reparents children onto the BranchRevision set above, and
+		// can only fail for a branch that is missing or trunk — neither reachable
+		// here, since trunk is filtered out of names.
+		if err := g.RemoveBranch(name); err != nil {
+			continue
+		}
+
 		// A recreated branch of the same name must start with no claim on the
 		// remote (ADR-0014).
 		_ = c.Store.DeletePushRecordsForBranch(name)
