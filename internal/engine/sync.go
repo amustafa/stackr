@@ -40,13 +40,9 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	// Pull shared metadata (best-effort).
 	TryPullMeta(c)
 
-	// Checkout trunk and pull.
-	if err := c.Git.Checkout(trunk); err != nil {
+	// Bring trunk up to date, without claiming it in this worktree.
+	if err := fastForwardTrunk(c, cfg.Remote, trunk); err != nil {
 		return err
-	}
-	remoteTrunk := cfg.Remote + "/" + trunk
-	if err := c.Git.RunGit("merge", "--ff-only", remoteTrunk); err != nil {
-		return fmt.Errorf("could not fast-forward %s: %w", trunk, err)
 	}
 
 	// Update trunk revision in graph.
@@ -81,17 +77,20 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	// Return to original branch if it still exists.
 	if origBranch != "" && origBranch != trunk {
 		if g.Has(origBranch) {
-			_ = c.Git.Checkout(origBranch)
+			// Sync no longer parks this worktree on trunk, so usually we never
+			// left. Only check out when something downstream (restack) moved us.
+			if cur, cerr := c.Git.CurrentBranch(); cerr != nil || cur != origBranch {
+				_ = c.Git.Checkout(origBranch)
+			}
 		} else if !c.Quiet {
-			// origBranch was cleaned up as merged. cleanMergedBranches can't
-			// remove the worktree we're running from — the earlier checkout to
-			// trunk already repurposed it, and a process can't safely delete
-			// the directory it's executing in. Surface that so a worktree that
-			// existed only for this branch doesn't sit forgotten as a stale
-			// trunk checkout.
+			// origBranch was cleaned up as merged, so cleanMergedBranches
+			// vacated this worktree off it — a process can't safely delete the
+			// directory it's executing in. Surface that so a worktree that
+			// existed only for this branch doesn't sit forgotten as a stray
+			// checkout.
 			if gitDir, derr := c.Git.GitDir(); derr == nil {
 				if commonDir, cerr := c.Git.GitCommonDir(); cerr == nil && gitDir != commonDir {
-					fmt.Printf("Note: %s was cleaned up as merged; this worktree is now on %s. Remove it with `sr worktree remove` if you no longer need it.\n", origBranch, trunk)
+					fmt.Printf("Note: %s was cleaned up as merged; this worktree no longer holds a tracked branch. Remove it with `sr worktree remove` if you no longer need it.\n", origBranch)
 				}
 			}
 		}
@@ -99,6 +98,54 @@ func Sync(c *context.Context, opts SyncOpts) error {
 
 	if !c.Quiet {
 		fmt.Println("Sync complete")
+	}
+	return nil
+}
+
+// fastForwardTrunk brings the local trunk ref up to date with the remote.
+//
+// Where trunk is checked out decides how. Checking it out unconditionally — what
+// sync used to do — fails outright whenever another worktree already holds it,
+// and that is the ordinary shape of a stackr repo: the main checkout sits on
+// trunk while feature branches live in worktrees. Running `sr sync` from one of
+// those worktrees died on git's "already used by worktree" before it fetched,
+// restacked, or cleaned anything up.
+func fastForwardTrunk(c *context.Context, remote, trunk string) error {
+	remoteTrunk := remote + "/" + trunk
+
+	// Trunk is checked out right here: an ff-only merge moves the ref and this
+	// working tree together.
+	if cur, err := c.Git.CurrentBranch(); err == nil && cur == trunk {
+		if err := c.Git.RunGit("merge", "--ff-only", remoteTrunk); err != nil {
+			return fmt.Errorf("could not fast-forward %s: %w", trunk, err)
+		}
+		return nil
+	}
+
+	// Another worktree holds trunk. Git refuses to update a ref checked out
+	// elsewhere, so the merge has to run over there — the same way restack
+	// rebases a branch inside the worktree that owns it.
+	//
+	// A failure here stops the sync rather than continuing on a stale trunk.
+	// Everything downstream measures against trunk — which branches have landed,
+	// what the stack rebases onto — so proceeding would quietly do less than the
+	// user asked for and report success. Better to say why and let them clear
+	// the blocking worktree.
+	if wtPath, werr := c.Git.WorktreeForBranch(trunk); werr == nil && wtPath != "" && !sameWorktree(wtPath, c.Git.Dir) {
+		runner := *c.Git
+		runner.Dir = wtPath
+		if err := runner.RunGit("merge", "--ff-only", remoteTrunk); err != nil {
+			return fmt.Errorf("could not fast-forward %s in worktree %s: %w", trunk, wtPath, err)
+		}
+		return nil
+	}
+
+	// Trunk is checked out nowhere: fast-forward the ref in place, no checkout
+	// at all. Fetching from "." reuses the remote-tracking ref updated by the
+	// fetch above and keeps fast-forward-only semantics — a diverged trunk still
+	// errors rather than being silently reset.
+	if err := c.Git.RunGit("fetch", ".", remoteTrunk+":"+trunk); err != nil {
+		return fmt.Errorf("could not fast-forward %s: %w", trunk, err)
 	}
 	return nil
 }
@@ -145,28 +192,58 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 			b.BranchRevision = tip
 		}
 
+		// A branch checked out anywhere can't be force-deleted — git refuses —
+		// and even where it could, the worktree would be left behind as a
+		// checkout of a branch that no longer exists in the graph. Which
+		// worktree holds it decides what to do about that.
+		//
+		// Every failure below leaves the branch tracked and bails out. Git has
+		// to let go of the branch before the graph does: reporting it cleaned
+		// while git still holds it strands it — dropped from the graph, alive on
+		// disk, restacked by nothing, and invisible to `sr log`.
+		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" {
+			if sameWorktree(wtPath, c.Git.Dir) {
+				// The worktree we're running from. A process can't delete the
+				// directory it is executing in, so vacate the branch instead of
+				// removing the worktree. Land on trunk when it is free; when
+				// another worktree owns the trunk ref, detach at it instead —
+				// attempting the checkout first would only spill git's
+				// "already used by worktree" fatal into an otherwise fine sync.
+				vacate := []string{"checkout", trunk}
+				if trunkWt, terr := c.Git.WorktreeForBranch(trunk); terr == nil && trunkWt != "" {
+					vacate = []string{"checkout", "--detach", trunk}
+				}
+				if err := c.Git.RunGit(vacate...); err != nil {
+					if !c.Quiet {
+						fmt.Printf("Note: %s is merged but checked out here and could not be vacated (%v); leaving the branch in place\n", name, err)
+					}
+					continue
+				}
+			} else if rmErr := c.Git.WorktreeRemove(wtPath); rmErr != nil {
+				if !c.Quiet {
+					fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+				}
+				continue
+			} else if !c.Quiet {
+				fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+			}
+		}
+
+		if err := c.Git.DeleteBranch(name, true); err != nil {
+			if !c.Quiet {
+				fmt.Printf("Note: %s is merged but could not be deleted (%v); leaving it tracked\n", name, err)
+			}
+			continue
+		}
+
+		// Only now that git has released the branch may it leave the graph.
+		// RemoveBranch reparents children onto the BranchRevision set above, and
+		// can only fail for a branch that is missing or trunk — neither reachable
+		// here, since trunk is filtered out of names.
 		if err := g.RemoveBranch(name); err != nil {
 			continue
 		}
 
-		// A branch checked out in another worktree can't be force-deleted —
-		// git refuses — and even where it could, the worktree itself would be
-		// left behind as a checkout of a branch that no longer exists in the
-		// graph. Remove that worktree first. The worktree we're running from
-		// is skipped: it can't remove itself, and if it held this branch,
-		// Sync already moved it onto trunk before cleanup ran, so
-		// WorktreeForBranch no longer associates it with name anyway.
-		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" && !sameWorktree(wtPath, c.Git.Dir) {
-			if rmErr := c.Git.WorktreeRemove(wtPath); rmErr == nil {
-				if !c.Quiet {
-					fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
-				}
-			} else if !c.Quiet {
-				fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
-			}
-		}
-
-		_ = c.Git.DeleteBranch(name, true)
 		// A recreated branch of the same name must start with no claim on the
 		// remote (ADR-0014).
 		_ = c.Store.DeletePushRecordsForBranch(name)
