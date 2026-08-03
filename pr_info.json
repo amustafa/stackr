@@ -84,6 +84,13 @@
       "baseBranch": "am/fix-ai-spawn",
       "stackNumber": 32
     },
+    "am/sync-from-worktree": {
+      "number": 38,
+      "title": "fix(sync): make sr sync work from a worktree when trunk is checked out elsewhere",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/38",
+      "baseBranch": "main"
+    },
     "am/sync-worktree-cleanup": {
       "number": 26,
       "title": "sync: clean up worktrees left behind by merged branches",
