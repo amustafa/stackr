@@ -27,6 +27,10 @@
               "reference": "internal/engine/sync.go"
             }
           ]
+        },
+        {
+          "key": "risk",
+          "text": "Not claiming trunk means a merged current branch can no longer be deleted out from under us, so cleanMergedBranches now vacates first: checkout trunk when free, else 'checkout --detach trunk', which succeeds even when another worktree owns the trunk ref."
         }
       ]
     },
