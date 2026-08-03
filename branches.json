@@ -1,9 +1,18 @@
 {
   "version": 1,
   "branches": {
-    "main": {
+    "am/sync-from-worktree": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
       "branchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
       "children": [],
+      "description": "Make sr sync work from a worktree when trunk is checked out elsewhere"
+    },
+    "main": {
+      "branchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
+      "children": [
+        "am/sync-from-worktree"
+      ],
       "isTrunk": true
     }
   }
