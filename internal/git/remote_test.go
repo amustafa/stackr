@@ -1,6 +1,7 @@
 package git
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -121,6 +122,39 @@ func TestPushPinned_EmptyExpectCreatesBranchAndRejectsOnceItExists(t *testing.T)
 	}
 	if !IsStaleLease(err) {
 		t.Fatalf("expected StaleLeaseError, got %T: %v", err, err)
+	}
+}
+
+func TestPushPinned_VerifyControlsPrePushHook(t *testing.T) {
+	local, _, _ := newRepoWithRemote(t)
+	branch, _ := local.CurrentBranch()
+
+	hookDir, err := local.RunGitCapture("rev-parse", "--git-path", "hooks")
+	if err != nil {
+		t.Fatalf("locate hooks dir: %v", err)
+	}
+	if !filepath.IsAbs(hookDir) {
+		hookDir = filepath.Join(local.Dir, hookDir)
+	}
+	if err := os.MkdirAll(hookDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(hookDir, "pre-push")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	inspected, _ := local.RevParse("refs/remotes/origin/" + branch)
+	commitFile(t, local, "b.txt", "two\n", "c2")
+
+	local.Verify = true
+	if err := local.PushPinned("origin", branch, inspected, true); err == nil {
+		t.Fatal("push must fail while the pre-push hook rejects and Verify is on")
+	}
+
+	local.Verify = false
+	if err := local.PushPinned("origin", branch, inspected, true); err != nil {
+		t.Fatalf("Verify=false must pass --no-verify and skip the hook: %v", err)
 	}
 }
 

@@ -13,6 +13,11 @@ var submitCmd = &cobra.Command{
 		if err := ctx.RequireInit(); err != nil {
 			return err
 		}
+		// A local override of the global --verify: pushed straight to the git
+		// runner so every git command this submit runs gets --no-verify.
+		if submitFlagNoVerify {
+			ctx.Git.Verify = false
+		}
 		return engine.Submit(ctx, engine.SubmitOpts{
 			Draft:      submitFlagDraft,
 			Stack:      submitFlagStack,
@@ -37,6 +42,7 @@ var (
 	submitFlagForce     bool
 	submitFlagNoForce   bool
 	submitFlagDryRun    bool
+	submitFlagNoVerify  bool
 	submitFlagTitle     string
 	submitFlagBody      string
 	submitFlagBodyFile  string
@@ -66,6 +72,8 @@ func init() {
 		"never force-push; fail instead")
 	submitCmd.MarkFlagsMutuallyExclusive("force", "no-force")
 	submitCmd.Flags().BoolVar(&submitFlagDryRun, "dry-run", false, "show what would be pushed, changing nothing")
+	submitCmd.Flags().BoolVar(&submitFlagNoVerify, "no-verify", false,
+		"skip git hooks (passes --no-verify to git push)")
 	submitCmd.Flags().StringVar(&submitFlagTitle, "title", "", "PR title (skips interactive prompts)")
 	submitCmd.Flags().StringVar(&submitFlagBody, "body", "", "PR body (used with --title)")
 	submitCmd.Flags().StringVar(&submitFlagBodyFile, "body-file", "", "read PR body from file (used with --title)")
