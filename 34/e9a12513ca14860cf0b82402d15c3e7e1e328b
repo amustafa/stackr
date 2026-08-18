@@ -1,0 +1,24 @@
+cmd/shell_hook.go
+  s_9dd492677a2969::t_5c9110e7a74cd7 9-13,16-34,36,47-49
+  s_9dd492677a2969::t_e776ff44598a9d 50
+cmd/navigate.go
+  s_9dd492677a2969::t_5c9110e7a74cd7 5,11-16,18-27,29,31
+cmd/navigate_test.go
+  s_9dd492677a2969::t_93629e350f803f 1-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "34e9a12513ca14860cf0b82402d15c3e7e1e328b",
+  "prompts": {},
+  "sessions": {
+    "s_9dd492677a2969": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851b1f60-d6f8-4964-805f-1423d4dda6cf",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
