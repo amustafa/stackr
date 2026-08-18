@@ -40,8 +40,38 @@ func ghCheckInstalled() error {
 }
 
 // ghPRForBranch checks whether a PR exists for the given branch.
-// Returns nil, nil when no PR exists (gh exits with code 1).
+// Returns nil, nil when no PR exists.
+//
+// gh exits 1 both for "no pull requests found" and for server-side failures
+// (HTTP 503 and friends), so the exit code cannot distinguish "no PR" from
+// "GitHub didn't answer". Mistaking the second for the first made submit
+// offer to create PRs that already existed — the answer has to come from the
+// error text. Server-side failures are retried before giving up, since one
+// flaky call otherwise poisons a whole stack survey.
 func ghPRForBranch(branch string) (*PRResult, error) {
+	const attempts = 3
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(time.Duration(i) * time.Second)
+		}
+		result, stderr, err := ghPRView(branch)
+		switch {
+		case err == nil:
+			return result, nil
+		case ghNoPRFound(stderr):
+			return nil, nil
+		case !ghServerError(stderr):
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+// ghPRView runs one `gh pr view` and returns its stderr alongside the error,
+// so the caller can classify the failure. It never interprets exit codes.
+func ghPRView(branch string) (*PRResult, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
 	defer cancel()
 
@@ -55,20 +85,30 @@ func ghPRForBranch(branch string) (*PRResult, error) {
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("gh pr view timed out after %s", ghTimeout)
+			return nil, "", fmt.Errorf("gh pr view timed out after %s", ghTimeout)
 		}
-		// gh exits 1 when no PR exists for the branch.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("gh pr view failed: %s: %w", strings.TrimSpace(stderr.String()), err)
+		msg := strings.TrimSpace(stderr.String())
+		return nil, msg, fmt.Errorf("gh pr view failed: %s: %w", msg, err)
 	}
 
 	var result PRResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse gh output: %w", err)
+		return nil, "", fmt.Errorf("failed to parse gh output: %w", err)
 	}
-	return &result, nil
+	return &result, "", nil
+}
+
+// ghNoPRFound reports whether a gh failure means the branch genuinely has no
+// pull request — gh prints `no pull requests found for branch "x"` for it.
+func ghNoPRFound(stderr string) bool {
+	return strings.Contains(stderr, "no pull requests found")
+}
+
+// ghServerError reports whether a gh failure is GitHub's, not ours: an HTTP
+// 5xx from the API (gh prints "HTTP 503: ..."). Worth retrying; everything
+// else (auth, rate limits, bad requests) fails the same way again.
+func ghServerError(stderr string) bool {
+	return strings.Contains(stderr, "HTTP 5")
 }
 
 // ghUpdatePRBase retargets an existing PR's base branch on GitHub.
