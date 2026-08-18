@@ -1,0 +1,26 @@
+internal/engine/github_test.go
+  s_e3d41373e03483::t_d24b6e04364a0d 54-55,68-70,77
+  s_e3d41373e03483::t_57cff2c5cad4a4 1-2,9-52
+  s_e3d41373e03483::t_b15449464df76f 3-8
+  s_e3d41373e03483::t_f33e8c3093607c 53,56-67,71-76,78-115
+internal/engine/github.go
+  s_e3d41373e03483::t_62365dad3d9f40 43-50,52-74,88,90-91,96,98-111
+internal/engine/prepare_test.go
+  s_e3d41373e03483::t_484db8b64cb204 14-17,22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "009ac1465507bf3b03649636622d156bd4ae9a56",
+  "prompts": {},
+  "sessions": {
+    "s_e3d41373e03483": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6b5c8b41-9250-4f55-b638-3b66b2e23e69",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
