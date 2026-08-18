@@ -8,11 +8,19 @@
       "children": [],
       "description": "Opt-in automatic GitHub issue filing for unexpected stackr errors, with noise suppression"
     },
+    "am/pull-meta-bootstrap": {
+      "parentBranchName": "am/submit-no-verify",
+      "parentBranchRevision": "ada46327233a060a7a301f038ffff59cccce0b64",
+      "branchRevision": "ada46327233a060a7a301f038ffff59cccce0b64",
+      "children": []
+    },
     "am/submit-no-verify": {
       "parentBranchName": "main",
       "parentBranchRevision": "afb73ce6ad286a2343192a9c2baa237c739e621a",
       "branchRevision": "c9f3f17c8d108a907d253e52d03db559d1ca40f1",
-      "children": []
+      "children": [
+        "am/pull-meta-bootstrap"
+      ]
     },
     "am/sync-from-worktree": {
       "parentBranchName": "main",
