@@ -8,7 +8,8 @@ import (
 // Sentinel errors for common failure modes.
 var (
 	ErrNotARepo       = errors.New("not a git repository")
-	ErrNotInitialized = errors.New("stackr not initialized — run `sr init`")
+	ErrNotInitialized = errors.New("stackr not initialized — run `sr init` " +
+		"(or `sr pull-meta` if this repo already uses stackr: fresh clones don't fetch its metadata ref)")
 	ErrDirtyWorktree  = errors.New("working tree has uncommitted changes")
 	ErrOnTrunk        = errors.New("cannot perform this operation on the trunk branch")
 	ErrBranchNotFound = errors.New("branch not found in stack graph")
