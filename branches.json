@@ -11,7 +11,7 @@
     "am/submit-no-verify": {
       "parentBranchName": "main",
       "parentBranchRevision": "afb73ce6ad286a2343192a9c2baa237c739e621a",
-      "branchRevision": "35c81d3e96d75f4b7b6901842877016a78cf0d13",
+      "branchRevision": "c9f3f17c8d108a907d253e52d03db559d1ca40f1",
       "children": []
     },
     "am/sync-from-worktree": {
