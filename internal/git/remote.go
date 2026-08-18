@@ -142,6 +142,18 @@ func (r *Runner) FetchPrune(remote string) error {
 	return r.RunGit("fetch", "--prune", remote)
 }
 
+// RemoteHasRef asks the remote itself (via ls-remote) whether ref exists.
+// Unlike RemoteBranchExists it does not depend on a prior fetch — custom refs
+// like refs/stackr/data are never fetched by default — at the cost of a
+// network round-trip.
+func (r *Runner) RemoteHasRef(remote, ref string) (bool, error) {
+	out, err := r.RunGitCapture("ls-remote", remote, ref)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // RemoteBranchExists checks if a branch exists on the remote.
 func (r *Runner) RemoteBranchExists(remote, branch string) (bool, error) {
 	_, err := r.RunGitCapture("rev-parse", "--verify", "refs/remotes/"+remote+"/"+branch)

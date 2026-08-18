@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	srctx "github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/internal/git"
+	"github.com/amustafa/stackr/internal/store"
 	"github.com/amustafa/stackr/internal/ui"
 )
 
@@ -254,5 +256,65 @@ func TestApplyFormResultCustomBranch(t *testing.T) {
 
 	if r.IsHeadUnborn() {
 		t.Fatal("should have created a commit")
+	}
+}
+
+// seedRemoteWithMeta creates a bare remote carrying refs/stackr/data and
+// returns a fresh clone's context — the "new collaborator" starting state.
+func seedRemoteWithMeta(t *testing.T, seed bool) *srctx.Context {
+	t.Helper()
+
+	remoteDir := t.TempDir()
+	remote := &git.Runner{Dir: remoteDir}
+	if _, err := remote.RunGitCapture("init", "--bare"); err != nil {
+		t.Fatalf("git init bare: %v", err)
+	}
+
+	if seed {
+		seedDir := t.TempDir()
+		seeder := &git.Runner{Dir: seedDir}
+		if _, err := seeder.RunGitCapture("clone", remoteDir, "."); err != nil {
+			t.Fatalf("clone seeder: %v", err)
+		}
+		seeder.RunGitCapture("config", "user.email", "seed@test.com")
+		seeder.RunGitCapture("config", "user.name", "Seeder")
+		gitDir, _ := seeder.GitCommonDir()
+		st := store.NewRefStore(seeder, gitDir)
+		if err := st.WriteConfig(&store.Config{Trunk: "main", Remote: "origin"}); err != nil {
+			t.Fatalf("seed WriteConfig: %v", err)
+		}
+		if err := st.Push("origin"); err != nil {
+			t.Fatalf("seed Push: %v", err)
+		}
+	}
+
+	dir := t.TempDir()
+	runner := &git.Runner{Dir: dir}
+	if _, err := runner.RunGitCapture("clone", remoteDir, "."); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	gitDir, _ := runner.GitCommonDir()
+	return &srctx.Context{
+		Git:   runner,
+		Store: store.NewRefStore(runner, gitDir),
+		Quiet: true,
+	}
+}
+
+func TestRemoteWithStackrMeta_FindsSeededRemote(t *testing.T) {
+	c := seedRemoteWithMeta(t, true)
+	remote, ok := remoteWithStackrMeta(c)
+	if !ok {
+		t.Fatal("must detect stackr metadata on the seeded remote")
+	}
+	if remote != "origin" {
+		t.Fatalf("remote = %q, want origin", remote)
+	}
+}
+
+func TestRemoteWithStackrMeta_EmptyRemote(t *testing.T) {
+	c := seedRemoteWithMeta(t, false)
+	if remote, ok := remoteWithStackrMeta(c); ok {
+		t.Fatalf("must not detect metadata on an empty remote, got %q", remote)
 	}
 }
