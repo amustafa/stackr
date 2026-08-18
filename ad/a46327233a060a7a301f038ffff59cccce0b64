@@ -1,0 +1,25 @@
+cmd/meta.go
+  s_9dd492677a2969::t_2858b7da146557 23-25,27-29
+internal/errors/errors.go
+  s_9dd492677a2969::t_5b1a6d706292e3 11-12
+internal/engine/meta.go
+  s_9dd492677a2969::t_78910953f6eb2d 33-38,44-53,55,57,59,62-69
+internal/engine/meta_test.go
+  s_9dd492677a2969::t_99d910af47fe9d 1-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ada46327233a060a7a301f038ffff59cccce0b64",
+  "prompts": {},
+  "sessions": {
+    "s_9dd492677a2969": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851b1f60-d6f8-4964-805f-1423d4dda6cf",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
