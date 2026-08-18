@@ -12,7 +12,9 @@
       "parentBranchName": "am/pull-meta-bootstrap",
       "parentBranchRevision": "64819b2a71c3ce62f5dce6fd4c32695ba1ea8345",
       "branchRevision": "64819b2a71c3ce62f5dce6fd4c32695ba1ea8345",
-      "children": []
+      "children": [
+        "am/shell-hook-cd-file"
+      ]
     },
     "am/pull-meta-bootstrap": {
       "parentBranchName": "am/submit-no-verify",
@@ -21,6 +23,12 @@
       "children": [
         "am/init-adopt-remote-meta"
       ]
+    },
+    "am/shell-hook-cd-file": {
+      "parentBranchName": "am/init-adopt-remote-meta",
+      "parentBranchRevision": "34e9a12513ca14860cf0b82402d15c3e7e1e328b",
+      "branchRevision": "34e9a12513ca14860cf0b82402d15c3e7e1e328b",
+      "children": []
     },
     "am/submit-no-verify": {
       "parentBranchName": "main",
