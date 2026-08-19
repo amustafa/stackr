@@ -12,7 +12,9 @@
       "parentBranchName": "am/pull-meta-bootstrap",
       "parentBranchRevision": "0867d030e3d08b926d2d4de4d08bdeb649cc56ef",
       "branchRevision": "32208ae227eea00357732a4a977c5519889ca693",
-      "children": []
+      "children": [
+        "am/shell-hook-cd-file"
+      ]
     },
     "am/pull-meta-bootstrap": {
       "parentBranchName": "am/submit-no-verify",
@@ -23,12 +25,10 @@
       ]
     },
     "am/shell-hook-cd-file": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
-      "branchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
-      "children": [
-        "am/submit-pr-survey-503"
-      ]
+      "parentBranchName": "am/init-adopt-remote-meta",
+      "parentBranchRevision": "32208ae227eea00357732a4a977c5519889ca693",
+      "branchRevision": "287ae1876721a3243f8c8752da4c38139c918a83",
+      "children": []
     },
     "am/submit-no-verify": {
       "parentBranchName": "main",
@@ -39,7 +39,7 @@
       ]
     },
     "am/submit-pr-survey-503": {
-      "parentBranchName": "am/shell-hook-cd-file",
+      "parentBranchName": "main",
       "parentBranchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
       "branchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
       "children": []
@@ -91,7 +91,7 @@
         "am/sync-from-worktree",
         "am/error-reporting",
         "am/submit-no-verify",
-        "am/shell-hook-cd-file"
+        "am/submit-pr-survey-503"
       ],
       "isTrunk": true
     }
