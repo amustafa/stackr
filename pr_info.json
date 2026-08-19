@@ -42,7 +42,7 @@
     "am/init-adopt-remote-meta": {
       "number": 41,
       "title": "feat(init): adopt existing remote stackr metadata instead of initializing fresh",
-      "state": "OPEN",
+      "state": "CLOSED",
       "url": "https://github.com/amustafa/stackr/pull/41",
       "baseBranch": "am/pull-meta-bootstrap",
       "stackNumber": 44
@@ -65,7 +65,7 @@
     "am/pull-meta-bootstrap": {
       "number": 40,
       "title": "feat(meta): let pull-meta bootstrap a fresh clone",
-      "state": "OPEN",
+      "state": "CLOSED",
       "url": "https://github.com/amustafa/stackr/pull/40",
       "baseBranch": "am/submit-no-verify",
       "stackNumber": 44
@@ -95,7 +95,7 @@
     "am/shell-hook-cd-file": {
       "number": 42,
       "title": "fix(shell-hook): pass the cd target through a file so prompts keep the TTY",
-      "state": "OPEN",
+      "state": "CLOSED",
       "url": "https://github.com/amustafa/stackr/pull/42",
       "baseBranch": "am/init-adopt-remote-meta",
       "stackNumber": 44
@@ -119,7 +119,7 @@
     "am/submit-pr-survey-503": {
       "number": 43,
       "title": "fix(submit): do not mistake GitHub 5xx errors for a missing PR",
-      "state": "OPEN",
+      "state": "CLOSED",
       "url": "https://github.com/amustafa/stackr/pull/43",
       "baseBranch": "am/shell-hook-cd-file",
       "stackNumber": 44
