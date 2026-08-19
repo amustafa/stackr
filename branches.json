@@ -9,7 +9,7 @@
       "description": "Opt-in automatic GitHub issue filing for unexpected stackr errors, with noise suppression"
     },
     "am/init-adopt-remote-meta": {
-      "parentBranchName": "am/pull-meta-bootstrap",
+      "parentBranchName": "main",
       "parentBranchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
       "branchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
       "children": [
@@ -17,12 +17,10 @@
       ]
     },
     "am/pull-meta-bootstrap": {
-      "parentBranchName": "main",
+      "parentBranchName": "am/submit-no-verify",
       "parentBranchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
-      "branchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
-      "children": [
-        "am/init-adopt-remote-meta"
-      ]
+      "branchRevision": "0867d030e3d08b926d2d4de4d08bdeb649cc56ef",
+      "children": []
     },
     "am/shell-hook-cd-file": {
       "parentBranchName": "am/init-adopt-remote-meta",
@@ -36,7 +34,9 @@
       "parentBranchName": "main",
       "parentBranchRevision": "afb73ce6ad286a2343192a9c2baa237c739e621a",
       "branchRevision": "0d57b0d6ff3625455b3bd5f8874f9b952c8ca412",
-      "children": []
+      "children": [
+        "am/pull-meta-bootstrap"
+      ]
     },
     "am/submit-pr-survey-503": {
       "parentBranchName": "am/shell-hook-cd-file",
@@ -90,8 +90,8 @@
       "children": [
         "am/sync-from-worktree",
         "am/error-reporting",
-        "am/pull-meta-bootstrap",
-        "am/submit-no-verify"
+        "am/submit-no-verify",
+        "am/init-adopt-remote-meta"
       ],
       "isTrunk": true
     }
