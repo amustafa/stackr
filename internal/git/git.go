@@ -15,7 +15,7 @@ type Runner struct {
 	Dir    string // Working directory for git commands
 	Env    []string
 	Debug  bool
-	Verify bool // Pass --no-verify when false (for hooks)
+	NoVerify bool // Pass --no-verify to git (skip hooks); the zero value runs hooks
 }
 
 // RunGit executes a git command, forwarding stdout/stderr to the terminal.

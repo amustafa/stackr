@@ -16,7 +16,7 @@ var submitCmd = &cobra.Command{
 		// A local override of the global --verify: pushed straight to the git
 		// runner so every git command this submit runs gets --no-verify.
 		if submitFlagNoVerify {
-			ctx.Git.Verify = false
+			ctx.Git.NoVerify = true
 		}
 		return engine.Submit(ctx, engine.SubmitOpts{
 			Draft:      submitFlagDraft,

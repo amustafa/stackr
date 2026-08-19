@@ -125,7 +125,9 @@ func TestPushPinned_EmptyExpectCreatesBranchAndRejectsOnceItExists(t *testing.T)
 	}
 }
 
-func TestPushPinned_VerifyControlsPrePushHook(t *testing.T) {
+// The zero-value Runner must run hooks: skipping them has to be an explicit
+// opt-in (NoVerify), never something a forgotten field silently grants.
+func TestPushPinned_NoVerifyControlsPrePushHook(t *testing.T) {
 	local, _, _ := newRepoWithRemote(t)
 	branch, _ := local.CurrentBranch()
 
@@ -147,14 +149,14 @@ func TestPushPinned_VerifyControlsPrePushHook(t *testing.T) {
 	inspected, _ := local.RevParse("refs/remotes/origin/" + branch)
 	commitFile(t, local, "b.txt", "two\n", "c2")
 
-	local.Verify = true
+	// NoVerify deliberately left at its zero value: hooks must run.
 	if err := local.PushPinned("origin", branch, inspected, true); err == nil {
-		t.Fatal("push must fail while the pre-push hook rejects and Verify is on")
+		t.Fatal("push must fail while the pre-push hook rejects and NoVerify is unset")
 	}
 
-	local.Verify = false
+	local.NoVerify = true
 	if err := local.PushPinned("origin", branch, inspected, true); err != nil {
-		t.Fatalf("Verify=false must pass --no-verify and skip the hook: %v", err)
+		t.Fatalf("NoVerify must pass --no-verify and skip the hook: %v", err)
 	}
 }
 

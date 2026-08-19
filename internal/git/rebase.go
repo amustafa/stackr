@@ -3,7 +3,7 @@ package git
 // Rebase rebases the current branch onto target.
 func (r *Runner) Rebase(onto string) error {
 	args := []string{"rebase", onto}
-	if !r.Verify {
+	if r.NoVerify {
 		args = append(args, "--no-verify")
 	}
 	return r.RunGit(args...)
@@ -12,7 +12,7 @@ func (r *Runner) Rebase(onto string) error {
 // RebaseOnto performs `git rebase --onto newBase oldBase branch`.
 func (r *Runner) RebaseOnto(newBase, oldBase, branch string) error {
 	args := []string{"rebase", "--onto", newBase, oldBase, branch}
-	if !r.Verify {
+	if r.NoVerify {
 		args = append(args, "--no-verify")
 	}
 	return r.RunGit(args...)

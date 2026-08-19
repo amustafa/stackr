@@ -90,7 +90,7 @@ func TestWriteReadmeSkipsExisting(t *testing.T) {
 
 func TestBootstrapNonInteractive(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -106,7 +106,7 @@ func TestBootstrapNonInteractive(t *testing.T) {
 
 func TestBootstrapNonInteractiveWithTrunk(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -130,7 +130,7 @@ func TestBootstrapNonInteractiveWithTrunk(t *testing.T) {
 
 func TestApplyFormResultCreatesFiles(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -157,7 +157,7 @@ func TestApplyFormResultCreatesFiles(t *testing.T) {
 
 func TestApplyFormResultNoFiles(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -178,7 +178,7 @@ func TestApplyFormResultNoFiles(t *testing.T) {
 
 func TestApplyFormResultSetsConfig(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -204,7 +204,7 @@ func TestApplyFormResultSetsConfig(t *testing.T) {
 
 func TestApplyFormResultAddsRemotes(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")
@@ -230,7 +230,7 @@ func TestApplyFormResultAddsRemotes(t *testing.T) {
 
 func TestApplyFormResultCustomBranch(t *testing.T) {
 	dir := t.TempDir()
-	r := &git.Runner{Dir: dir, Debug: false, Verify: true}
+	r := &git.Runner{Dir: dir, Debug: false}
 	r.Init()
 	r.RunGit("config", "user.email", "test@test.com")
 	r.RunGit("config", "user.name", "Test")

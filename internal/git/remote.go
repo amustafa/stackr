@@ -59,7 +59,7 @@ func (r *Runner) PushPinned(remote, branch, expectSHA string, setUpstream bool) 
 	if setUpstream {
 		args = append(args, "-u")
 	}
-	if !r.Verify {
+	if r.NoVerify {
 		args = append(args, "--no-verify")
 	}
 	// An explicit refspec keeps the destination independent of push.default and

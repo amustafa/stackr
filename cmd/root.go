@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		ctx.Quiet = flagQuiet
-		ctx.Git.Verify = flagVerify
+		ctx.Git.NoVerify = !flagVerify
 		return nil
 	},
 	SilenceUsage:  true,
