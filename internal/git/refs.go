@@ -115,26 +115,49 @@ func (r *Runner) AllCommitsUpstream(upstream, branch, base string) (bool, error)
 // extends the same patch-id equivalence from one-to-one to many-to-one by
 // treating the branch's own commits as a single unit and looking for a
 // one-commit match upstream instead.
+//
+// The upstream side runs as one `git log -p | git patch-id` pipeline rather
+// than a diff+patch-id subprocess pair per commit. The range spans every trunk
+// commit since the branch's base — thousands, once a branch sits unrestacked
+// behind an active trunk — and per-commit spawning turns the scan into minutes
+// where the pipeline takes about a second. Merges are excluded: a squash or
+// rebase merge always lands as a non-merge commit.
 func (r *Runner) SquashMergedUpstream(upstream, branch, base string) (bool, error) {
 	branchID, err := r.patchID(base, branch)
 	if err != nil || branchID == "" {
 		return false, err
 	}
 
-	shas, err := r.RunGitCapture("rev-list", base+".."+upstream)
+	logCmd := r.command("log", "--no-color", "--no-merges", "-p",
+		"--format=commit %H", base+".."+upstream)
+	pipe, err := logCmd.StdoutPipe()
 	if err != nil {
 		return false, err
 	}
-	if shas == "" {
-		return false, nil
+
+	idCmd := r.command("patch-id", "--stable")
+	idCmd.Stdin = pipe
+	var stdout bytes.Buffer
+	idCmd.Stdout = &stdout
+
+	if err := logCmd.Start(); err != nil {
+		return false, err
+	}
+	if err := idCmd.Run(); err != nil {
+		// Unblock git log, which may be stalled writing into the dead pipe,
+		// so Wait can reap it.
+		pipe.Close()
+		_ = logCmd.Wait()
+		return false, err
+	}
+	if err := logCmd.Wait(); err != nil {
+		return false, err
 	}
 
-	for _, sha := range strings.Split(shas, "\n") {
-		id, err := r.patchID(sha+"^", sha)
-		if err != nil {
-			continue
-		}
-		if id != "" && id == branchID {
+	// git patch-id emits one "patch-id commit-sha" line per input commit.
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == branchID {
 			return true, nil
 		}
 	}

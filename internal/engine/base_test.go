@@ -258,8 +258,37 @@ func TestBranchHasLanded_SquashMergedBranch_IsDetected(t *testing.T) {
 	}
 
 	g, _ := c.Store.ReadGraph()
-	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}) {
+	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
 		t.Error("squash-merged branch not detected as landed; sync would replay it onto trunk")
+	}
+}
+
+// When GitHub answered the batched merged-PR query, its "not merged" is
+// trusted outright and the local patch-equivalence fallbacks are skipped —
+// branchHasLanded's forge-answered early return explains the cost trade-off.
+func TestBranchHasLanded_ForgeAnswered_SkipsLocalFallbacks(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "feature"}); err != nil {
+		t.Fatalf("create feature: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "the feature", "feat: add feature")
+	syncTip(t, c, "feature")
+
+	// A squash merge the local fallbacks WOULD detect (as
+	// TestBranchHasLanded_SquashMergedBranch_IsDetected proves), so a
+	// "landed" result here could only come from them running.
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "the feature", "feat: add feature (#7)")
+
+	g, _ := c.Store.ReadGraph()
+	if branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, true) {
+		t.Error("local fallbacks ran despite an authoritative forge answer")
+	}
+	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{"feature": true}, true) {
+		t.Error("branch the forge reports merged not detected as landed")
 	}
 }
 
@@ -297,7 +326,7 @@ func TestBranchHasLanded_MultiCommitSquashMergedBranch_IsDetected(t *testing.T) 
 		t.Fatal("test setup is wrong: per-commit patch-id comparison must not match a multi-commit squash")
 	}
 
-	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}) {
+	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
 		t.Error("multi-commit squash-merged branch not detected as landed; sync would replay it onto trunk")
 	}
 }
@@ -314,7 +343,7 @@ func TestBranchHasLanded_UnmergedBranch_IsNotDetected(t *testing.T) {
 	syncTip(t, c, "feature")
 
 	g, _ := c.Store.ReadGraph()
-	if branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}) {
+	if branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
 		t.Error("unmerged branch reported as landed; sync would delete unmerged work")
 	}
 }
@@ -329,7 +358,7 @@ func TestBranchHasLanded_EmptyBranch_IsNotDetected(t *testing.T) {
 	}
 
 	g, _ := c.Store.ReadGraph()
-	if branchHasLanded(c, "empty", g.Branches["empty"], trunk, map[string]bool{}) {
+	if branchHasLanded(c, "empty", g.Branches["empty"], trunk, map[string]bool{}, false) {
 		t.Error("branch with no commits reported as landed")
 	}
 }

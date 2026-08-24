@@ -147,14 +147,21 @@ func ghUpdatePRBase(number int, base string) error {
 // branch: those strategies rewrite the commits when landing them, so no local
 // ancestry test will ever recognize them as merged.
 //
-// Best-effort by design. Without gh, offline, or outside a GitHub remote this
-// returns an empty set and callers fall back to local heuristics — sync must
-// still work with no network.
-func ghMergedHeadBranches() map[string]bool {
+// The second return reports whether GitHub actually answered. Callers need
+// the distinction because an empty set means two very different things: "none
+// of these branches merged" — trustworthy, and the forge's word is final — or
+// "gh is missing, offline, or errored" — the local fallbacks are all there is.
+// Best-effort by design either way: sync must still work with no network.
+//
+// dir is the repository the query is about. gh resolves the target repo from
+// the git remotes of its working directory, and this can differ from the
+// process cwd (`--cwd`, worktrees, tests) — an answer about the wrong repo
+// would be trusted as final and silently disable the local fallbacks.
+func ghMergedHeadBranches(dir string) (map[string]bool, bool) {
 	merged := map[string]bool{}
 
 	if err := ghCheckInstalled(); err != nil {
-		return merged
+		return merged, false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
@@ -170,6 +177,7 @@ func ghMergedHeadBranches() map[string]bool {
 		"--search", "sort:updated-desc",
 		"--limit", "200",
 		"--json", "headRefName")
+	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1")
 
 	var stdout bytes.Buffer
@@ -177,21 +185,21 @@ func ghMergedHeadBranches() map[string]bool {
 	cmd.Stderr = nil
 
 	if err := cmd.Run(); err != nil {
-		return merged
+		return merged, false
 	}
 
 	var prs []struct {
 		HeadRefName string `json:"headRefName"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &prs); err != nil {
-		return merged
+		return merged, false
 	}
 	for _, pr := range prs {
 		if pr.HeadRefName != "" {
 			merged[pr.HeadRefName] = true
 		}
 	}
-	return merged
+	return merged, true
 }
 
 // ghCreatePR creates a new PR via gh and returns the result.
