@@ -86,6 +86,16 @@
         {
           "key": "approach",
           "text": "Trust the forge: when the batched gh merged-PR query succeeds, its 'not merged' is final and the local patch-equivalence fallbacks (git cherry + squash scan) are skipped — they rescan every trunk commit since each branch's base on every sync, ~45min measured in a 34-branch repo with stale bases"
+        },
+        {
+          "key": "design",
+          "text": "SquashMergedUpstream batches the upstream scan into one 'git log --no-merges -p | git patch-id --stable' pipeline instead of a diff+patch-id subprocess pair per commit: 2.1s vs ~4min on a real 1,415-commit range",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/git/refs.go"
+            }
+          ]
         }
       ]
     },
