@@ -87,7 +87,7 @@
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
-      "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
+      "branchRevision": "afcf5b53041b7e921ebd9ef814078562ecd13c0f",
       "children": [],
       "description": "Make sync's merged-branch detection fast: trust the forge's answer when available, and batch the offline squash-merge patch-id scan into one pipeline",
       "context": [
@@ -119,7 +119,21 @@
             }
           ]
         }
-      ]
+      ],
+      "commitContexts": {
+        "afcf5b5": [
+          {
+            "key": "step",
+            "text": "Forge-answered skip chosen over widening the gh window or per-branch gh queries: one batched query stays O(1) network calls, and the 200-most-recently-updated window miss only delays cleanup of a long-merged branch, it never deletes anything wrongly",
+            "sources": [
+              {
+                "type": "file",
+                "reference": "internal/engine/sync.go"
+              }
+            ]
+          }
+        ]
+      }
     },
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
