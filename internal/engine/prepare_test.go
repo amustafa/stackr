@@ -11,12 +11,16 @@ import (
 )
 
 // stubGH puts a `gh` on PATH that always reports "no PR for this branch", so
-// PrepareAI never reaches the network from a test.
+// PrepareAI never reaches the network from a test. It prints the same message
+// real gh does: a bare exit 1 is no longer read as "no PR" — it is
+// indistinguishable from a server failure, which is exactly the confusion
+// ghPRForBranch now refuses to make.
 func stubGH(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "gh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	body := "#!/bin/sh\necho 'no pull requests found for branch' >&2\nexit 1\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatalf("write gh stub: %v", err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
