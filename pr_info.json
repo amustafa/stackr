@@ -138,6 +138,13 @@
       "url": "https://github.com/amustafa/stackr/pull/38",
       "baseBranch": "main"
     },
+    "am/sync-skip-local-merge-scan": {
+      "number": 46,
+      "title": "perf(sync): skip local merge scans when GitHub answers, batch the squash scan",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/46",
+      "baseBranch": "main"
+    },
     "am/sync-worktree-cleanup": {
       "number": 26,
       "title": "sync: clean up worktrees left behind by merged branches",
