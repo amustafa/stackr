@@ -4,7 +4,7 @@
     "am/delete-worktree-aware": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
-      "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
+      "branchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
       "children": [],
       "description": "Make sr delete worktree-aware: interactive selection defaulting to current branch, navigate down when deleting the current branch, and remove a clean worktree holding the target instead of failing",
       "context": [
@@ -26,7 +26,15 @@
           "key": "risk",
           "text": "Refuses rather than guesses in the two unsafe worktree cases: dirty worktree, and running from inside the worktree being removed (would yank the cwd out from under the rest of the operation)"
         }
-      ]
+      ],
+      "commitContexts": {
+        "13d2b9b": [
+          {
+            "key": "step",
+            "text": "git refuses to delete a checked-out branch; delete now removes a clean linked worktree holding the target first, refuses on dirty worktrees, and steps down the stack (returning a NavigateResult for the shell-hook cd) when the target is checked out here. Bare sr delete gains interactive selection defaulting to the current branch."
+          }
+        ]
+      }
     },
     "am/error-reporting": {
       "parentBranchName": "main",
