@@ -100,6 +100,16 @@
         {
           "key": "risk",
           "text": "A squash-merged branch whose PR fell out of gh's 200-most-recently-updated window stays tracked while gh is available; ancestry still catches non-rewriting merges of any age, and the offline fallbacks still cover no-gh setups"
+        },
+        {
+          "key": "gotcha",
+          "text": "ghMergedHeadBranches ran gh in the process cwd, not the synced repo — with --cwd/worktrees/tests it could answer about the wrong repo. Harmless when the answer only added branches to a set; fatal once the answer is trusted as final, so it now takes the repo dir explicitly",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/github.go"
+            }
+          ]
         }
       ]
     },
