@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		ctx.Quiet = flagQuiet
-		ctx.Git.Verify = flagVerify
+		ctx.Git.NoVerify = !flagVerify
 		return nil
 	},
 	SilenceUsage:  true,
@@ -72,7 +72,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&flagDebug, "debug", false, "print git commands as they run")
 	rootCmd.PersistentFlags().BoolVar(&flagInteractive, "interactive", true, "enable interactive prompts")
 	rootCmd.PersistentFlags().BoolVarP(&flagQuiet, "quiet", "q", false, "suppress non-essential output")
-	rootCmd.PersistentFlags().BoolVar(&flagVerify, "verify", true, "run git hooks (use --no-verify to skip)")
+	rootCmd.PersistentFlags().BoolVar(&flagVerify, "verify", true, "run git hooks (use --verify=false to skip)")
 }
 
 // Execute runs the root command.

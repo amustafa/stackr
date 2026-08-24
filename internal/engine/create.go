@@ -78,7 +78,7 @@ func Create(c *context.Context, opts CreateOpts) error {
 
 		commitOpts := git.CommitOpts{}
 		if opts.NoVerify {
-			// Runner.Verify controls --no-verify; set it via the flag.
+			// Runner.NoVerify controls --no-verify; set it via the flag.
 		}
 		if err := c.Git.Commit(opts.Message, commitOpts); err != nil {
 			return err

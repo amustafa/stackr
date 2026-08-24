@@ -21,7 +21,7 @@ func (r *Runner) Commit(msg string, opts CommitOpts) error {
 	if opts.Edit {
 		args = append(args, "--edit")
 	}
-	if !r.Verify {
+	if r.NoVerify {
 		args = append(args, "--no-verify")
 	}
 	return r.RunGit(args...)
