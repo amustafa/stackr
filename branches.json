@@ -56,12 +56,20 @@
         }
       ]
     },
+    "am/sync-skip-local-merge-scan": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
+      "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
+      "children": [],
+      "description": "Make sync's merged-branch detection fast: trust the forge's answer when available, and batch the offline squash-merge patch-id scan into one pipeline"
+    },
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [
         "am/sync-from-worktree",
         "am/error-reporting",
-        "am/delete-worktree-aware"
+        "am/delete-worktree-aware",
+        "am/sync-skip-local-merge-scan"
       ],
       "isTrunk": true
     }
