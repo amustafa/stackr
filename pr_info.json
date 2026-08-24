@@ -148,6 +148,14 @@
       "baseBranch": "am/shell-hook-cd-file",
       "stackNumber": 44
     },
+    "am/sync-confirm-clean": {
+      "number": 50,
+      "title": "feat(sync): ask before deleting branches, and never mistake a parked branch for merged",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/50",
+      "baseBranch": "am/sync-skip-local-merge-scan",
+      "stackNumber": 48
+    },
     "am/sync-from-worktree": {
       "number": 38,
       "title": "fix(sync): make sr sync work from a worktree when trunk is checked out elsewhere",
