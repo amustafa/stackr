@@ -43,47 +43,6 @@
       "children": [],
       "description": "Opt-in automatic GitHub issue filing for unexpected stackr errors, with noise suppression"
     },
-    "am/sync-from-worktree": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
-      "branchRevision": "0615451423e7356d1b67b12af08fd6f88e918c62",
-      "children": [],
-      "description": "Make sr sync work from a worktree when trunk is checked out elsewhere",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Route the trunk fast-forward by where trunk is actually checked out, instead of claiming it in the current worktree. Sync used to open with an unconditional 'git checkout \u003ctrunk\u003e', which fails with \"already used by worktree\" in the ordinary stackr layout (primary checkout on trunk, features in worktrees) — killing sync before it fetched, restacked or cleaned anything.",
-          "sources": [
-            {
-              "type": "file",
-              "reference": "internal/engine/sync.go"
-            }
-          ]
-        },
-        {
-          "key": "design",
-          "text": "Three cases in fastForwardTrunk: merge --ff-only here when trunk is checked out here; run the same merge inside the owning worktree when another holds it (git refuses ref updates to a branch checked out elsewhere — mirrors restack.go:239); otherwise 'git fetch . origin/trunk:trunk' to move the ref with no checkout at all, preserving fast-forward-only safety.",
-          "sources": [
-            {
-              "type": "file",
-              "reference": "internal/engine/sync.go"
-            }
-          ]
-        },
-        {
-          "key": "risk",
-          "text": "Not claiming trunk means a merged current branch can no longer be deleted out from under us, so cleanMergedBranches now vacates first: checkout trunk when free, else 'checkout --detach trunk', which succeeds even when another worktree owns the trunk ref."
-        },
-        {
-          "key": "decision",
-          "text": "When the fast-forward is blocked inside trunk's own worktree, sync hard-fails and names the blocking path rather than continuing on a stale trunk. Everything downstream measures against trunk (which branches landed, what the stack rebases onto), so proceeding would quietly do less than asked while reporting success. Chosen by the repo owner over warn-and-continue."
-        },
-        {
-          "key": "review-fix",
-          "text": "CodeRabbit on PR #38 caught that a failed worktree cleanup still appended to cleaned and had already run g.RemoveBranch, stranding the branch: dropped from the graph, alive in git, restacked by nothing. Reachable pre-PR via the plain dirty-worktree path (git worktree remove refuses), so git must release the branch before the graph does — every failure now bails out leaving it tracked."
-        }
-      ]
-    },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
@@ -138,7 +97,6 @@
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [
-        "am/sync-from-worktree",
         "am/error-reporting",
         "am/delete-worktree-aware",
         "am/sync-skip-local-merge-scan"
