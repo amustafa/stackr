@@ -15,6 +15,14 @@
       "url": "https://github.com/amustafa/stackr/pull/13",
       "baseBranch": "skill-prompt-block"
     },
+    "am/delete-from-own-worktree": {
+      "number": 49,
+      "title": "fix(delete): support deleting the current branch from inside its own worktree",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/49",
+      "baseBranch": "am/delete-worktree-aware",
+      "stackNumber": 48
+    },
     "am/delete-worktree-aware": {
       "number": 45,
       "title": "fix(delete): remove the target's worktree instead of failing, step down when deleting the current branch",
