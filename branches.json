@@ -6,7 +6,19 @@
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [],
-      "description": "Make sr delete worktree-aware: interactive selection defaulting to current branch, navigate down when deleting the current branch, and remove a clean worktree holding the target instead of failing"
+      "description": "Make sr delete worktree-aware: interactive selection defaulting to current branch, navigate down when deleting the current branch, and remove a clean worktree holding the target instead of failing",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Delete now resolves the target's checkout location first: step down the stack when deleting the current branch (reusing NavigateToBranch so the shell hook can cd), then remove any clean linked worktree holding a target before git branch delete",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/delete.go"
+            }
+          ]
+        }
+      ]
     },
     "am/error-reporting": {
       "parentBranchName": "main",
