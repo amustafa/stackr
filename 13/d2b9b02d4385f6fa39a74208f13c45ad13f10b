@@ -1,0 +1,29 @@
+internal/ui/selector.go
+  s_b4f5394b2431ed::t_7b451b5f3b0b39 78-83,91
+  s_b4f5394b2431ed::t_a464abe27dea30 104-113
+internal/engine/delete_test.go
+  s_b4f5394b2431ed::t_7d9161d8a8108a 1-203
+internal/engine/delete.go
+  s_b4f5394b2431ed::t_fa99d151b1e634 127,135,142-143
+  s_b4f5394b2431ed::t_88ae5fbc6e40cf 80-85
+  s_b4f5394b2431ed::t_e4994299ab7f6d 73
+  s_b4f5394b2431ed::t_fda6e517298441 5,8,20-28,31,38,43,46-56,59-62,64-68,70-72,74-79,90-95,97-103,105-106,110,112-116,120-126,128-134,136-141,144-211
+cmd/delete.go
+  s_b4f5394b2431ed::t_9ce70f810c2a0b 4-6,8,15,27-41,43-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
+  "prompts": {},
+  "sessions": {
+    "s_b4f5394b2431ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93e37f0b-cff2-44d5-90e6-598f0426fb92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
