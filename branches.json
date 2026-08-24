@@ -82,6 +82,16 @@
         {
           "key": "approach",
           "text": "Deletion needs consent: interactive sync prompts per candidate branch with the evidence that nominated it (PR merged / ancestry / patch-equivalence); declining keeps it tracked. Non-TTY and --force keep the unprompted merged-only behavior for scripts"
+        },
+        {
+          "key": "design",
+          "text": "Parked-branch guard: a branch whose recorded branchRevision still equals its parentBranchRevision never held work sr saw; if its git tip is an ancestor of trunk it drifted along trunk (user fast-forwarded it), and the stale-base emptiness check plus every content test would misread that as merged. The graph is the only witness — veto detection",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/sync.go"
+            }
+          ]
         }
       ]
     },
