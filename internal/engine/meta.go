@@ -30,20 +30,42 @@ func PushMeta(c *context.Context) error {
 }
 
 // PullMeta fetches stackr metadata from the remote and merges.
+//
+// It deliberately works in an uninitialized clone: git does not fetch custom
+// refs, so a fresh clone of an sr-managed repo has no local metadata — and the
+// config naming the remote lives inside that metadata. Bootstrapping therefore
+// resolves the remote from the repo itself: the sole configured remote when
+// unambiguous, else "origin".
 func PullMeta(c *context.Context) error {
 	rs, ok := c.Store.(*store.RefStore)
 	if !ok {
 		return fmt.Errorf("metadata pull requires ref-based store — run `sr migrate` to upgrade")
 	}
-	cfg, err := c.Store.ReadConfig()
-	if err != nil {
-		return err
+
+	remote := "origin"
+	if rs.Exists() {
+		cfg, err := c.Store.ReadConfig()
+		if err != nil {
+			return err
+		}
+		remote = cfg.Remote
+	} else if remotes, err := c.Git.ListRemotes(); err == nil && len(remotes) == 1 {
+		remote = remotes[0]
 	}
+
 	if !c.Quiet {
-		fmt.Printf("Pulling stackr metadata from %s...\n", cfg.Remote)
+		fmt.Printf("Pulling stackr metadata from %s...\n", remote)
 	}
-	if err := rs.Pull(cfg.Remote); err != nil {
+	if err := rs.Pull(remote); err != nil {
 		return fmt.Errorf("failed to pull metadata: %w", err)
+	}
+	if !rs.Exists() {
+		return fmt.Errorf("%s has no stackr metadata — run `sr init` to start fresh", remote)
+	}
+	// A bootstrap pull adopted shared state but never ran init; create the
+	// local scaffolding (undo/rollback dirs) the rest of stackr expects.
+	if err := rs.Init(); err != nil {
+		return err
 	}
 	if !c.Quiet {
 		fmt.Println("Metadata synced")
