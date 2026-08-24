@@ -75,7 +75,7 @@
     "am/sync-confirm-clean": {
       "parentBranchName": "am/sync-skip-local-merge-scan",
       "parentBranchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
-      "branchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
+      "branchRevision": "370f8104524c26296ff3f8dd66968b8ae1c1f496",
       "children": [],
       "description": "Sync asks before deleting branches (merged and closed-PR candidates), and a parked branch that drifted along trunk is no longer mistaken for merged",
       "context": [
@@ -97,7 +97,21 @@
           "key": "risk",
           "text": "Closed-without-merge PR branches hold commits on no other ref, so they are offered only interactively and never auto-deleted; a genuinely merged branch that sr never saw commits on (raw-git workflow, ff-merge) now stays tracked instead of being cleaned — safe direction, operator can delete"
         }
-      ]
+      ],
+      "commitContexts": {
+        "370f810": [
+          {
+            "key": "step",
+            "text": "Per-branch ui.Confirm chosen over a multi-select: sync already narrates branch-by-branch, ui.Confirm exists, and a candidate list rarely exceeds a handful; confirmDelete and closedUnmergedHeads are package vars so tests answer without a TTY or a GitHub remote",
+            "sources": [
+              {
+                "type": "file",
+                "reference": "internal/engine/sync.go"
+              }
+            ]
+          }
+        ]
+      }
     },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "am/delete-worktree-aware",
