@@ -1,0 +1,27 @@
+cmd/init_test.go
+  s_9dd492677a2969::t_fc11f088868eab 8,10
+  s_9dd492677a2969::t_f8b12f95b9f1ce 261-320
+cmd/init.go
+  s_9dd492677a2969::t_68dc9a9e4404e6 10
+  s_9dd492677a2969::t_5e113a1811781f 168-186
+  s_9dd492677a2969::t_9785f17aa0d91c 96-110
+  s_9dd492677a2969::t_05aa917ab42bc7 187-188
+internal/git/remote.go
+  s_9dd492677a2969::t_1f38d782713cb2 145-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0fc24fa35b03c1af2ca1d0fac569f24dd606c0c2",
+  "prompts": {},
+  "sessions": {
+    "s_9dd492677a2969": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851b1f60-d6f8-4964-805f-1423d4dda6cf",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
