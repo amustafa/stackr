@@ -1,40 +1,12 @@
 {
   "version": 1,
   "branches": {
-    "am/delete-from-own-worktree": {
-      "parentBranchName": "am/delete-worktree-aware",
-      "parentBranchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
-      "branchRevision": "6f4af687f648e63b72db7d0ca2739d04b40bc96e",
-      "children": [],
-      "description": "Allow sr delete to run from inside the target's own worktree: cd the shell to the parent's worktree and re-anchor the process on the main checkout instead of refusing",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Instead of refusing when sr delete runs from inside the target's own worktree, hand the shell the parent worktree as the cd target and re-anchor the process (c.Git.Dir) on the main checkout, so the worktree removal and the graph write run from a directory that still exists",
-          "sources": [
-            {
-              "type": "file",
-              "reference": "internal/engine/delete.go"
-            }
-          ]
-        }
-      ],
-      "commitContexts": {
-        "6f4af68": [
-          {
-            "key": "step",
-            "text": "The previous guard rejected the common per-branch-worktree workflow (delete current branch, parent parked in another worktree). Now: verify clean, set NavigateResult to the parent worktree, re-anchor on the main checkout, then remove worktree and delete as usual. Dirty worktree still refuses with nothing touched."
-          }
-        ]
-      }
-    },
     "am/delete-worktree-aware": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "branchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
       "children": [
-        "am/sync-skip-local-merge-scan",
-        "am/delete-from-own-worktree"
+        "am/sync-skip-local-merge-scan"
       ],
       "description": "Make sr delete worktree-aware: interactive selection defaulting to current branch, navigate down when deleting the current branch, and remove a clean worktree holding the target instead of failing",
       "context": [
