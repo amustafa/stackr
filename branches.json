@@ -38,11 +38,19 @@
         ]
       }
     },
+    "am/squash-stack": {
+      "parentBranchName": "am/sync-skip-local-merge-scan",
+      "parentBranchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
+      "branchRevision": "6e06d79cd3443e421559b019264638760dc5b971",
+      "children": []
+    },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "am/delete-worktree-aware",
       "parentBranchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
       "branchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
-      "children": [],
+      "children": [
+        "am/squash-stack"
+      ],
       "description": "Make sync's merged-branch detection fast: trust the forge's answer when available, and batch the offline squash-merge patch-id scan into one pipeline",
       "context": [
         {
