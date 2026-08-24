@@ -1,0 +1,51 @@
+internal/git/remote_test.go
+  s_9dd492677a2969::t_ec6ac9fe9ec0cb 4
+  s_9dd492677a2969::t_0cd459a8bbd385 131-151,153,155-156,158,160-162
+  s_e3d41373e03483::t_b8eb9057db4266 152,154,157,159
+  s_e3d41373e03483::t_29e6f584ea3768 128-130
+internal/git/remote.go
+  s_9dd492677a2969::t_710ff20db673f5 63-64
+  s_e3d41373e03483::t_184a8799a1dc4b 62
+cmd/root.go
+  s_9dd492677a2969::t_b384220f91eb88 75
+  s_e3d41373e03483::t_184a8799a1dc4b 63
+cmd/submit.go
+  s_9dd492677a2969::t_dcbcccbca0000e 16-18,20
+  s_9dd492677a2969::t_222fb24929d950 75-76
+  s_9dd492677a2969::t_0384fce787cc9b 45
+  s_e3d41373e03483::t_184a8799a1dc4b 19
+internal/engine/create.go
+  s_e3d41373e03483::t_184a8799a1dc4b 81
+internal/git/rebase.go
+  s_e3d41373e03483::t_184a8799a1dc4b 6,15
+internal/git/git.go
+  s_e3d41373e03483::t_184a8799a1dc4b 18
+internal/git/commit.go
+  s_e3d41373e03483::t_184a8799a1dc4b 24
+cmd/init_test.go
+  s_e3d41373e03483::t_25cd4b0710e50f 93,109,133,160,181,207,233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "21ac21c076a8bcd41b7dd4c7851accd4c4097ff2",
+  "prompts": {},
+  "sessions": {
+    "s_9dd492677a2969": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851b1f60-d6f8-4964-805f-1423d4dda6cf",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    },
+    "s_e3d41373e03483": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6b5c8b41-9250-4f55-b638-3b66b2e23e69",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
