@@ -28,7 +28,7 @@ var (
 
 func init() {
 	syncCmd.Flags().BoolVar(&syncFlagRestack, "restack", true, "restack after syncing")
-	syncCmd.Flags().BoolVarP(&syncFlagForce, "force", "f", false, "force sync")
+	syncCmd.Flags().BoolVarP(&syncFlagForce, "force", "f", false, "clean up merged branches without asking")
 	syncCmd.Flags().BoolVarP(&syncFlagAll, "all", "a", false, "sync all stacks")
 	rootCmd.AddCommand(syncCmd)
 }

@@ -140,8 +140,8 @@ func ghUpdatePRBase(number int, base string) error {
 	return nil
 }
 
-// ghMergedHeadBranches returns the set of head-branch names whose PRs are
-// merged, in a single batched query.
+// ghMergedHeadBranches returns the head-branch names whose PRs are merged,
+// each keyed to its PR number, in a single batched query.
 //
 // This is the only reliable way to detect a squash-merged or rebase-merged
 // branch: those strategies rewrite the commits when landing them, so no local
@@ -157,26 +157,78 @@ func ghUpdatePRBase(number int, base string) error {
 // the git remotes of its working directory, and this can differ from the
 // process cwd (`--cwd`, worktrees, tests) — an answer about the wrong repo
 // would be trusted as final and silently disable the local fallbacks.
-func ghMergedHeadBranches(dir string) (map[string]bool, bool) {
-	merged := map[string]bool{}
+func ghMergedHeadBranches(dir string) (map[string]int, bool) {
+	merged := map[string]int{}
 
 	if err := ghCheckInstalled(); err != nil {
 		return merged, false
 	}
 
+	prs, ok := ghListPRHeads(dir, "merged")
+	if !ok {
+		return merged, false
+	}
+	for _, pr := range prs {
+		// The list is most-recently-updated first; for a head name reused
+		// across several merged PRs, the newest one is the relevant claim.
+		if pr.HeadRefName != "" && merged[pr.HeadRefName] == 0 {
+			merged[pr.HeadRefName] = pr.Number
+		}
+	}
+	return merged, true
+}
+
+// ghClosedUnmergedHeadBranches returns head-branch names that have a PR
+// closed WITHOUT merging, keyed to the newest such PR's number. A newer
+// merged PR can exist for the same head name; callers must let the merged
+// claim win, as cleanMergedBranches does.
+//
+// Deleting these branches discards work — their commits exist on no other
+// ref; see cleanMergedBranches for the consent policy that guards them.
+func ghClosedUnmergedHeadBranches(dir string) map[string]int {
+	closed := map[string]int{}
+
+	if err := ghCheckInstalled(); err != nil {
+		return closed
+	}
+
+	prs, ok := ghListPRHeads(dir, "closed")
+	if !ok {
+		return closed
+	}
+	for _, pr := range prs {
+		// gh routes --search through GitHub's search API, where "closed"
+		// includes merged PRs; the state field tells them apart. Keep only
+		// the newest claim per head name, as in ghMergedHeadBranches.
+		if pr.State == "CLOSED" && pr.HeadRefName != "" && closed[pr.HeadRefName] == 0 {
+			closed[pr.HeadRefName] = pr.Number
+		}
+	}
+	return closed
+}
+
+type ghPRHead struct {
+	HeadRefName string `json:"headRefName"`
+	Number      int    `json:"number"`
+	State       string `json:"state"`
+}
+
+// ghListPRHeads runs one batched `gh pr list` for the given state and returns
+// the raw entries, newest-updated first. The bool reports whether gh answered.
+func ghListPRHeads(dir, state string) ([]ghPRHead, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
 	defer cancel()
 
 	// --limit caps the result at the 200 most recent matches of whatever the
 	// query sorts by. Without an explicit sort, gh orders by creation date, so
 	// a branch merged today but created long ago could fall outside the
-	// window. "sort:updated-desc" orders by recency of merge instead, which is
-	// what determines whether cleanup needs to see it.
+	// window. "sort:updated-desc" orders by recency of the state change
+	// instead, which is what determines whether cleanup needs to see it.
 	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
-		"--state", "merged",
+		"--state", state,
 		"--search", "sort:updated-desc",
 		"--limit", "200",
-		"--json", "headRefName")
+		"--json", "headRefName,number,state")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1")
 
@@ -185,21 +237,14 @@ func ghMergedHeadBranches(dir string) (map[string]bool, bool) {
 	cmd.Stderr = nil
 
 	if err := cmd.Run(); err != nil {
-		return merged, false
+		return nil, false
 	}
 
-	var prs []struct {
-		HeadRefName string `json:"headRefName"`
-	}
+	var prs []ghPRHead
 	if err := json.Unmarshal(stdout.Bytes(), &prs); err != nil {
-		return merged, false
+		return nil, false
 	}
-	for _, pr := range prs {
-		if pr.HeadRefName != "" {
-			merged[pr.HeadRefName] = true
-		}
-	}
-	return merged, true
+	return prs, true
 }
 
 // ghCreatePR creates a new PR via gh and returns the result.

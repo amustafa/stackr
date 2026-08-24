@@ -258,8 +258,44 @@ func TestBranchHasLanded_SquashMergedBranch_IsDetected(t *testing.T) {
 	}
 
 	g, _ := c.Store.ReadGraph()
-	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
+	if _, landed := branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]int{}, false); !landed {
 		t.Error("squash-merged branch not detected as landed; sync would replay it onto trunk")
+	}
+}
+
+// A parked branch — tracked but never seen to hold a commit of its own —
+// fast-forwarded along trunk outside sr must not read as landed; the
+// parked-branch guard in branchHasLanded explains why every other test
+// would ratify deleting it.
+func TestBranchHasLanded_ParkedBranchDriftedAlongTrunk_IsNotDetected(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	oldRev, err := c.Git.RevParse(trunk)
+	if err != nil {
+		t.Fatalf("rev-parse trunk: %v", err)
+	}
+
+	if _, err := c.Git.RunGitCapture("branch", "parked", oldRev); err != nil {
+		t.Fatalf("branch parked: %v", err)
+	}
+	g, _ := c.Store.ReadGraph()
+	if err := g.AddBranch("parked", trunk, oldRev, oldRev); err != nil {
+		t.Fatalf("add branch: %v", err)
+	}
+	if err := c.Store.WriteGraph(g); err != nil {
+		t.Fatalf("write graph: %v", err)
+	}
+
+	// Trunk moves on; the user keeps the parked branch fresh by hand.
+	commitFile(t, c, "t1.txt", "trunk work\n", "trunk commit 1")
+	commitFile(t, c, "t2.txt", "more trunk work\n", "trunk commit 2")
+	newTip, _ := c.Git.RevParse(trunk)
+	if _, err := c.Git.RunGitCapture("branch", "-f", "parked", newTip); err != nil {
+		t.Fatalf("fast-forward parked: %v", err)
+	}
+
+	g, _ = c.Store.ReadGraph()
+	if reason, landed := branchHasLanded(c, "parked", g.Branches["parked"], trunk, map[string]int{}, false); landed {
+		t.Errorf("parked branch detected as landed (%s); sync would delete a branch that never held work", reason)
 	}
 }
 
@@ -284,10 +320,10 @@ func TestBranchHasLanded_ForgeAnswered_SkipsLocalFallbacks(t *testing.T) {
 	commitFile(t, c, "feature.txt", "the feature", "feat: add feature (#7)")
 
 	g, _ := c.Store.ReadGraph()
-	if branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, true) {
+	if _, landed := branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]int{}, true); landed {
 		t.Error("local fallbacks ran despite an authoritative forge answer")
 	}
-	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{"feature": true}, true) {
+	if _, landed := branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]int{"feature": 7}, true); !landed {
 		t.Error("branch the forge reports merged not detected as landed")
 	}
 }
@@ -326,7 +362,7 @@ func TestBranchHasLanded_MultiCommitSquashMergedBranch_IsDetected(t *testing.T) 
 		t.Fatal("test setup is wrong: per-commit patch-id comparison must not match a multi-commit squash")
 	}
 
-	if !branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
+	if _, landed := branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]int{}, false); !landed {
 		t.Error("multi-commit squash-merged branch not detected as landed; sync would replay it onto trunk")
 	}
 }
@@ -343,7 +379,7 @@ func TestBranchHasLanded_UnmergedBranch_IsNotDetected(t *testing.T) {
 	syncTip(t, c, "feature")
 
 	g, _ := c.Store.ReadGraph()
-	if branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]bool{}, false) {
+	if _, landed := branchHasLanded(c, "feature", g.Branches["feature"], trunk, map[string]int{}, false); landed {
 		t.Error("unmerged branch reported as landed; sync would delete unmerged work")
 	}
 }
@@ -358,7 +394,7 @@ func TestBranchHasLanded_EmptyBranch_IsNotDetected(t *testing.T) {
 	}
 
 	g, _ := c.Store.ReadGraph()
-	if branchHasLanded(c, "empty", g.Branches["empty"], trunk, map[string]bool{}, false) {
+	if _, landed := branchHasLanded(c, "empty", g.Branches["empty"], trunk, map[string]int{}, false); landed {
 		t.Error("branch with no commits reported as landed")
 	}
 }

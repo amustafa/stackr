@@ -6,6 +6,7 @@ import (
 
 	"github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/internal/graph"
+	"github.com/amustafa/stackr/internal/ui"
 )
 
 // SyncOpts controls sync behavior.
@@ -52,11 +53,12 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	}
 	g.Branches[trunk].BranchRevision = trunkRev
 
-	// Clean up merged branches.
-	cleaned := cleanMergedBranches(c, g, trunk)
+	// Clean up merged branches, asking the operator first when there is one
+	// to ask; --force deletes without prompting.
+	cleaned := cleanMergedBranches(c, g, trunk, c.Interactive && !opts.Force)
 	for _, name := range cleaned {
 		if !c.Quiet {
-			fmt.Printf("Cleaned up merged branch: %s\n", name)
+			fmt.Printf("Cleaned up branch: %s\n", name)
 		}
 	}
 
@@ -159,11 +161,23 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 // already contains — producing a conflict on every commit, or a silent
 // duplicate. That is the single most common way a stack gets mangled by sync.
 //
-// So three tests, cheapest and most authoritative first.
-func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []string {
+// So a ladder of tests, cheapest and most authoritative first.
+//
+// Deleting a branch is the most destructive thing sync does, so when confirm
+// is set every deletion is offered to the operator first, with the evidence
+// that nominated it; declining leaves the branch tracked. Confirmation also
+// unlocks a second candidate class: branches whose PR was closed WITHOUT
+// merging. Those hold commits that exist on no other ref, so they are only
+// ever deleted with explicit consent — never on the unprompted path.
+func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confirm bool) []string {
 	// One batched query instead of one `gh pr view` per branch. Best-effort:
 	// offline, or without gh, we fall through to the local patch-id test.
 	mergedPRs, forgeAnswered := ghMergedHeadBranches(c.Git.Dir)
+
+	closedPRs := map[string]int{}
+	if confirm {
+		closedPRs = closedUnmergedHeads(c.Git.Dir)
+	}
 
 	// Sort for deterministic output and stable parent-before-child removal.
 	names := make([]string, 0, len(g.Branches))
@@ -181,8 +195,23 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 			continue // already removed as part of an earlier reparent
 		}
 
-		if !branchHasLanded(c, name, b, trunk, mergedPRs, forgeAnswered) {
-			continue
+		reason, landed := branchHasLanded(c, name, b, trunk, mergedPRs, forgeAnswered)
+		if !landed {
+			// Not landed — possibly still a candidate, if its PR was closed
+			// without merging. A head name can carry both an old closed PR
+			// and a newer merged one; the merged claim wins and was already
+			// handled above.
+			if closedPRs[name] == 0 || mergedPRs[name] != 0 {
+				continue
+			}
+			reason = fmt.Sprintf("PR #%d was closed without merging; its commits are NOT on %s", closedPRs[name], trunk)
+		}
+
+		if confirm {
+			ok, err := confirmDelete(fmt.Sprintf("Delete %s? — %s", name, reason))
+			if err != nil || !ok {
+				continue
+			}
 		}
 
 		// Children are about to be reparented onto this branch's tip, which
@@ -253,8 +282,9 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 }
 
 // branchHasLanded reports whether a branch's work is already present on trunk,
-// by whichever merge strategy was used.
-func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trunk string, mergedPRs map[string]bool, forgeAnswered bool) bool {
+// by whichever merge strategy was used. The reason names the evidence, in
+// words fit for a deletion prompt; it is empty when the branch has not landed.
+func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trunk string, mergedPRs map[string]int, forgeAnswered bool) (string, bool) {
 	base, baseErr := resolveBase(c, name, b)
 
 	// A branch with no commits of its own has not landed — it is simply empty.
@@ -262,19 +292,33 @@ func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trun
 	// and sync would delete the branch the user created five seconds ago.
 	if baseErr == nil {
 		if has, err := c.Git.HasCommitsSince(base.SHA, name); err == nil && !has {
-			return false
+			return "", false
 		}
 	}
 
+	ancestor, _ := c.Git.IsMergedInto(name, trunk)
+
+	// A parked branch — tracked but never seen to hold a commit of its own,
+	// which the graph records as a tip still equal to its base — can drift
+	// along trunk when the user fast-forwards or resets it outside sr. Git
+	// then shows a tip that is an ancestor of trunk, and the emptiness check
+	// above is blind to it: against the stale recorded base, the "commits
+	// since base" are trunk's own history, not the branch's. Every test below
+	// would ratify that as a merge; the graph is the only witness that there
+	// was never anything to land.
+	if ancestor && b.BranchRevision == b.ParentBranchRevision {
+		return "", false
+	}
+
 	// 1. Plain ancestry — a merge commit or fast-forward merge.
-	if merged, err := c.Git.IsMergedInto(name, trunk); err == nil && merged {
-		return true
+	if ancestor {
+		return "already contained in " + trunk, true
 	}
 
 	// 2. The forge says the PR merged. Authoritative for squash and rebase
 	//    merges, which rewrite commits and defeat every local test.
-	if mergedPRs[name] {
-		return true
+	if n := mergedPRs[name]; n != 0 {
+		return fmt.Sprintf("PR #%d merged", n), true
 	}
 
 	// When the forge answered, its "not merged" is as authoritative as its
@@ -287,7 +331,7 @@ func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trun
 	// deleted by hand, but ancestry (test 1) still catches non-rewriting
 	// merges of any age.
 	if forgeAnswered {
-		return false
+		return "", false
 	}
 
 	// 3. Local fallback: every commit the branch owns already has a
@@ -295,16 +339,26 @@ func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trun
 	//    know which commits the branch owns, so an unresolvable base means
 	//    "not merged" — refusing to delete is the safe direction to be wrong in.
 	if baseErr != nil {
-		return false
+		return "", false
 	}
 	if landed, err := c.Git.AllCommitsUpstream(trunk, name, base.SHA); err == nil && landed {
-		return true
+		return "every commit already has an equivalent on " + trunk, true
 	}
 
 	// 4. Local fallback for a squash merge: git cherry (used above) compares
 	//    patch IDs one commit at a time, so it can't see a squash merge that
 	//    collapsed this branch's several commits into trunk's one. Compare the
 	//    branch's combined diff against each trunk commit's diff instead.
-	landed, err := c.Git.SquashMergedUpstream(trunk, name, base.SHA)
-	return err == nil && landed
+	if landed, err := c.Git.SquashMergedUpstream(trunk, name, base.SHA); err == nil && landed {
+		return "its combined diff matches a commit on " + trunk, true
+	}
+	return "", false
 }
+
+// confirmDelete asks the operator to approve one branch deletion. A variable
+// so tests can answer without a terminal.
+var confirmDelete = ui.Confirm
+
+// closedUnmergedHeads finds branches whose PR closed without merging. A
+// variable so tests can supply candidates without a GitHub remote.
+var closedUnmergedHeads = ghClosedUnmergedHeadBranches
