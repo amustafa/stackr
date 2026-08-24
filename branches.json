@@ -92,6 +92,10 @@
               "reference": "internal/engine/sync.go"
             }
           ]
+        },
+        {
+          "key": "risk",
+          "text": "Closed-without-merge PR branches hold commits on no other ref, so they are offered only interactively and never auto-deleted; a genuinely merged branch that sr never saw commits on (raw-git workflow, ff-merge) now stays tracked instead of being cleaned — safe direction, operator can delete"
         }
       ]
     },
