@@ -81,7 +81,13 @@
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [],
-      "description": "Make sync's merged-branch detection fast: trust the forge's answer when available, and batch the offline squash-merge patch-id scan into one pipeline"
+      "description": "Make sync's merged-branch detection fast: trust the forge's answer when available, and batch the offline squash-merge patch-id scan into one pipeline",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Trust the forge: when the batched gh merged-PR query succeeds, its 'not merged' is final and the local patch-equivalence fallbacks (git cherry + squash scan) are skipped — they rescan every trunk commit since each branch's base on every sync, ~45min measured in a 34-branch repo with stale bases"
+        }
+      ]
     },
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
