@@ -6,7 +6,19 @@
       "parentBranchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
       "branchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
       "children": [],
-      "description": "Allow sr delete to run from inside the target's own worktree: cd the shell to the parent's worktree and re-anchor the process on the main checkout instead of refusing"
+      "description": "Allow sr delete to run from inside the target's own worktree: cd the shell to the parent's worktree and re-anchor the process on the main checkout instead of refusing",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Instead of refusing when sr delete runs from inside the target's own worktree, hand the shell the parent worktree as the cd target and re-anchor the process (c.Git.Dir) on the main checkout, so the worktree removal and the graph write run from a directory that still exists",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/delete.go"
+            }
+          ]
+        }
+      ]
     },
     "am/delete-worktree-aware": {
       "parentBranchName": "main",
