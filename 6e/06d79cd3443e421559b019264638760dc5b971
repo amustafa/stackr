@@ -1,0 +1,24 @@
+cmd/squash.go
+  s_9dd492677a2969::t_7c8ca2a611e02a 12-20,29-30,39-40,47-56
+internal/engine/squash.go
+  s_9dd492677a2969::t_3fe888bbe5c946 196-206
+  s_9dd492677a2969::t_c6af50cb09bbe9 16-25,30-33,44-64,68,70,84,90,104,136,138-139,141-152,155-195,207-254
+internal/engine/squash_test.go
+  s_9dd492677a2969::t_966ffb39d23a62 1-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6e06d79cd3443e421559b019264638760dc5b971",
+  "prompts": {},
+  "sessions": {
+    "s_9dd492677a2969": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851b1f60-d6f8-4964-805f-1423d4dda6cf",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
