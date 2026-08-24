@@ -17,6 +17,10 @@
               "reference": "internal/engine/delete.go"
             }
           ]
+        },
+        {
+          "key": "design",
+          "text": "Delete returns a NavigateResult like the navigation commands; cmd/delete reports it even on partial failure so an already-performed step-down still cds the shell"
         }
       ]
     },
