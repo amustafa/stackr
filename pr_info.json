@@ -121,7 +121,7 @@
       "title": "feat(squash): add --restack and --stack for squashing a whole stack",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/47",
-      "baseBranch": "am/sync-skip-local-merge-scan",
+      "baseBranch": "am/sync-confirm-clean",
       "stackNumber": 48
     },
     "am/submit-covers-every-branch": {
