@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	srctx "github.com/amustafa/stackr/internal/context"
+	"github.com/amustafa/stackr/internal/engine"
 	srerr "github.com/amustafa/stackr/internal/errors"
 	"github.com/amustafa/stackr/internal/git"
 	"github.com/amustafa/stackr/internal/graph"
@@ -92,6 +93,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("stackr already initialized (use --reset to re-initialize)")
 	}
 
+	// A remote that already has stackr metadata means another clone initialized
+	// this repo — creating blank state here would silently shadow the shared
+	// graph. Adopt the remote's state instead. --reset keeps meaning "start
+	// over deliberately", so it skips the adoption.
+	if !initFlagReset {
+		if remote, ok := remoteWithStackrMeta(c); ok {
+			fmt.Printf("Found existing stackr metadata on %s — adopting it instead of initializing fresh.\n", remote)
+			if err := engine.PullMeta(c); err != nil {
+				return err
+			}
+			maybeOfferClaudeInstall(c)
+			return nil
+		}
+	}
+
 	trunk := initFlagTrunk
 	if trunk == "" {
 		trunk, err = c.Git.DefaultBranch()
@@ -147,6 +163,27 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	maybeOfferClaudeInstall(c)
 	return nil
+}
+
+// remoteWithStackrMeta reports which remote, if any, already holds stackr
+// metadata. Best-effort by design: it probes the network, and a remote that
+// is unreachable is treated the same as one without metadata — init then
+// proceeds fresh, which is also what an offline `sr init` needs.
+func remoteWithStackrMeta(c *srctx.Context) (string, bool) {
+	rs, ok := c.Store.(*store.RefStore)
+	if !ok {
+		return "", false
+	}
+	remotes, err := c.Git.ListRemotes()
+	if err != nil {
+		return "", false
+	}
+	for _, remote := range remotes {
+		if has, err := c.Git.RemoteHasRef(remote, rs.Ref()); err == nil && has {
+			return remote, true
+		}
+	}
+	return "", false
 }
 
 // maybeOfferClaudeInstall checks whether the stackr Claude Code prompt is
