@@ -1,0 +1,24 @@
+internal/engine/delete.go
+  s_b4f5394b2431ed::t_99f36ff779663a 73-74,77,81-107
+internal/engine/delete_test.go
+  s_b4f5394b2431ed::t_ace71b2d9c190d 224-226
+  s_b4f5394b2431ed::t_f664398d608db3 187-223,227-268
+  s_b4f5394b2431ed::t_8224cb58699685 9-10,13-26
+  s_b4f5394b2431ed::t_8f8c7e4478705c 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6f4af687f648e63b72db7d0ca2739d04b40bc96e",
+  "prompts": {},
+  "sessions": {
+    "s_b4f5394b2431ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93e37f0b-cff2-44d5-90e6-598f0426fb92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
