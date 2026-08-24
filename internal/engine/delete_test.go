@@ -6,7 +6,24 @@ import (
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
+	"github.com/amustafa/stackr/internal/git"
+	"github.com/amustafa/stackr/internal/store"
 )
+
+// contextAt returns a context anchored at dir, sharing the repo's ref store —
+// the state `sr` sees when run from a linked worktree.
+func contextAt(t *testing.T, dir string) *context.Context {
+	t.Helper()
+	r := &git.Runner{Dir: dir}
+	gitDir, err := r.GitCommonDir()
+	if err != nil {
+		t.Fatalf("git common dir: %v", err)
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	return &context.Context{Git: r, Store: store.NewRefStore(r, gitDir), Quiet: true}
+}
 
 // addWorktree parks a branch in a linked worktree and returns the worktree path.
 // The current checkout must not have the branch checked out.
@@ -164,6 +181,88 @@ func TestDelete_Upstack_RemovesWorktrees(t *testing.T) {
 	g, _ := c.Store.ReadGraph()
 	if g.Has("a") || g.Has("b") {
 		t.Error("graph still tracks deleted branches")
+	}
+}
+
+// Running `sr delete` from inside the target's own worktree, with the parent
+// checked out in another worktree: the target's worktree is removed, the
+// navigation points at the parent's worktree, and the operation survives its
+// own cwd disappearing.
+func TestDelete_FromOwnWorktree_ParentInAnotherWorktree(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "a"}); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	if err := Create(c, CreateOpts{Name: "b"}); err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	wtA := addWorktree(t, c, "a")
+	wtB := addWorktree(t, c, "b")
+
+	cB := contextAt(t, canonicalPath(wtB))
+	nav, err := Delete(cB, DeleteOpts{})
+	if err != nil {
+		t.Fatalf("delete from own worktree: %v", err)
+	}
+
+	if nav.Branch != "a" {
+		t.Errorf("navigated to %q, want %q", nav.Branch, "a")
+	}
+	if got := canonicalPath(nav.WorktreePath); got != canonicalPath(wtA) {
+		t.Errorf("navigation points at %q, want parent worktree %q", got, wtA)
+	}
+	if _, err := os.Stat(wtB); !os.IsNotExist(err) {
+		t.Errorf("worktree at %s still exists after delete", wtB)
+	}
+	if branchExists(t, c, "b") {
+		t.Error("branch b still exists after delete")
+	}
+	// Read the graph through a fresh store — c.Store's blob cache predates the
+	// write and would show the old graph, which a new process never sees.
+	g, _ := contextAt(t, c.Git.Dir).Store.ReadGraph()
+	if g.Has("b") {
+		t.Error("graph still tracks b after delete")
+	}
+	current, _ := c.Git.CurrentBranch()
+	if current != trunk {
+		t.Errorf("main checkout moved to %q, want to stay on trunk %q", current, trunk)
+	}
+}
+
+// The same scenario with uncommitted changes in the target's worktree must
+// refuse and leave everything in place.
+func TestDelete_FromOwnWorktree_Dirty_Fails(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "a"}); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	if err := Create(c, CreateOpts{Name: "b"}); err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	addWorktree(t, c, "a")
+	wtB := addWorktree(t, c, "b")
+	if err := os.WriteFile(filepath.Join(wtB, "wip.txt"), []byte("wip"), 0o644); err != nil {
+		t.Fatalf("write wip file: %v", err)
+	}
+
+	cB := contextAt(t, canonicalPath(wtB))
+	if _, err := Delete(cB, DeleteOpts{}); err == nil {
+		t.Fatal("delete from dirty own worktree succeeded; want error")
+	}
+
+	if !branchExists(t, c, "b") {
+		t.Error("branch b was deleted despite dirty worktree")
+	}
+	if _, err := os.Stat(wtB); err != nil {
+		t.Errorf("worktree at %s was removed despite being dirty", wtB)
 	}
 }
 

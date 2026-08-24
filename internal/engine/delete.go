@@ -70,19 +70,41 @@ func Delete(c *context.Context, opts DeleteOpts) (NavigateResult, error) {
 		if parent == "" {
 			parent = g.TrunkName()
 		}
-		if err := checkDeleteFromOwnWorktree(c, current, name, parent); err != nil {
-			return nav, err
-		}
-		nav, err = NavigateToBranch(c, parent)
+		mainRoot, err := deleteMainRoot(c)
 		if err != nil {
 			return nav, err
 		}
-		// When the parent lives in another worktree, NavigateToBranch only
-		// reports where to cd — this checkout is still on the doomed branch,
-		// which git would refuse to delete. Park it on trunk.
-		if stillOn, _ := c.Git.CurrentBranch(); deleting[stillOn] {
-			if err := c.Git.Checkout(g.TrunkName()); err != nil {
-				return nav, fmt.Errorf("moving this checkout off %q before deleting: %w", stillOn, err)
+		parentWt, err := c.Git.WorktreeForBranch(parent)
+		if err != nil {
+			return nav, err
+		}
+		if canonicalPath(c.Git.Dir) != mainRoot && parentWt != "" {
+			// We're inside a linked worktree that is about to be removed, and
+			// the parent is checked out elsewhere so it can't be checked out
+			// here. Hand the shell the parent's location to cd to, and
+			// re-anchor this process on the main checkout so the removal and
+			// everything after it run from a directory that still exists.
+			dirty, err := c.Git.IsDirty()
+			if err != nil {
+				return nav, err
+			}
+			if dirty {
+				return nav, fmt.Errorf("worktree for %q at %s has uncommitted changes; commit or stash them first", current, c.Git.Dir)
+			}
+			nav = NavigateResult{Branch: parent, WorktreePath: parentWt}
+			c.Git.Dir = mainRoot
+		} else {
+			nav, err = NavigateToBranch(c, parent)
+			if err != nil {
+				return nav, err
+			}
+			// When the parent lives in another worktree, NavigateToBranch only
+			// reports where to cd — this checkout is still on the doomed
+			// branch, which git would refuse to delete. Park it on trunk.
+			if stillOn, _ := c.Git.CurrentBranch(); deleting[stillOn] {
+				if err := c.Git.Checkout(g.TrunkName()); err != nil {
+					return nav, fmt.Errorf("moving this checkout off %q before deleting: %w", stillOn, err)
+				}
 			}
 		}
 	}
@@ -118,31 +140,6 @@ func Delete(c *context.Context, opts DeleteOpts) (NavigateResult, error) {
 	}
 
 	return nav, c.Store.WriteGraph(g)
-}
-
-// checkDeleteFromOwnWorktree rejects deleting the current branch from inside
-// its own linked worktree when the parent is checked out elsewhere. Stepping
-// down would cd away, and removing the worktree we're running from would pull
-// the directory out from under the rest of the operation.
-func checkDeleteFromOwnWorktree(c *context.Context, current, name, parent string) error {
-	mainRoot, err := deleteMainRoot(c)
-	if err != nil {
-		return err
-	}
-	if canonicalPath(c.Git.Dir) == mainRoot {
-		return nil
-	}
-	// We're in a linked worktree holding a branch to delete. Stepping down
-	// keeps this worktree alive only if the parent can be checked out here.
-	parentWt, err := c.Git.WorktreeForBranch(parent)
-	if err != nil {
-		return err
-	}
-	if parentWt != "" {
-		return fmt.Errorf("branch %q is checked out in this worktree and %q is checked out at %s; run `sr delete %s` from there or from the main checkout",
-			current, parent, parentWt, name)
-	}
-	return nil
 }
 
 // removeWorktreeHolding removes the linked worktree that has branch checked
