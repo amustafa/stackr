@@ -77,7 +77,13 @@
       "parentBranchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
       "branchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
       "children": [],
-      "description": "Sync asks before deleting branches (merged and closed-PR candidates), and a parked branch that drifted along trunk is no longer mistaken for merged"
+      "description": "Sync asks before deleting branches (merged and closed-PR candidates), and a parked branch that drifted along trunk is no longer mistaken for merged",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Deletion needs consent: interactive sync prompts per candidate branch with the evidence that nominated it (PR merged / ancestry / patch-equivalence); declining keeps it tracked. Non-TTY and --force keep the unprompted merged-only behavior for scripts"
+        }
+      ]
     },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "am/delete-worktree-aware",
