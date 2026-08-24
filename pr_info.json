@@ -20,7 +20,8 @@
       "title": "fix(delete): remove the target's worktree instead of failing, step down when deleting the current branch",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/45",
-      "baseBranch": "main"
+      "baseBranch": "main",
+      "stackNumber": 48
     },
     "am/fix-ai-spawn": {
       "number": 33,
@@ -107,6 +108,14 @@
       "baseBranch": "am/init-adopt-remote-meta",
       "stackNumber": 44
     },
+    "am/squash-stack": {
+      "number": 47,
+      "title": "feat(squash): add --restack and --stack for squashing a whole stack",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/47",
+      "baseBranch": "am/sync-skip-local-merge-scan",
+      "stackNumber": 48
+    },
     "am/submit-covers-every-branch": {
       "number": 35,
       "title": "submit creates a PR for every branch it pushes",
@@ -143,7 +152,8 @@
       "title": "perf(sync): skip local merge scans when GitHub answers, batch the squash scan",
       "state": "OPEN",
       "url": "https://github.com/amustafa/stackr/pull/46",
-      "baseBranch": "main"
+      "baseBranch": "am/delete-worktree-aware",
+      "stackNumber": 48
     },
     "am/sync-worktree-cleanup": {
       "number": 26,
