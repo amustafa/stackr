@@ -96,6 +96,10 @@
               "reference": "internal/git/refs.go"
             }
           ]
+        },
+        {
+          "key": "risk",
+          "text": "A squash-merged branch whose PR fell out of gh's 200-most-recently-updated window stays tracked while gh is available; ancestry still catches non-rewriting merges of any age, and the offline fallbacks still cover no-gh setups"
         }
       ]
     },
