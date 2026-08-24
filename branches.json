@@ -36,13 +36,6 @@
         ]
       }
     },
-    "am/error-reporting": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "88c8c595c257515df8c8cb96880b6cfaace710f1",
-      "branchRevision": "404d491f8d1d2b7f0ea9296d6f938de6b24a4131",
-      "children": [],
-      "description": "Opt-in automatic GitHub issue filing for unexpected stackr errors, with noise suppression"
-    },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
@@ -97,7 +90,6 @@
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [
-        "am/error-reporting",
         "am/delete-worktree-aware",
         "am/sync-skip-local-merge-scan"
       ],
