@@ -5,7 +5,9 @@
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "branchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
-      "children": [],
+      "children": [
+        "am/sync-skip-local-merge-scan"
+      ],
       "description": "Make sr delete worktree-aware: interactive selection defaulting to current branch, navigate down when deleting the current branch, and remove a clean worktree holding the target instead of failing",
       "context": [
         {
@@ -37,7 +39,7 @@
       }
     },
     "am/sync-skip-local-merge-scan": {
-      "parentBranchName": "main",
+      "parentBranchName": "am/delete-worktree-aware",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "branchRevision": "afcf5b53041b7e921ebd9ef814078562ecd13c0f",
       "children": [],
@@ -90,8 +92,7 @@
     "main": {
       "branchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
       "children": [
-        "am/delete-worktree-aware",
-        "am/sync-skip-local-merge-scan"
+        "am/delete-worktree-aware"
       ],
       "isTrunk": true
     }
