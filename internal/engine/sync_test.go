@@ -72,7 +72,7 @@ func TestCleanMergedBranches_RemovesWorktreeOfMergedBranch(t *testing.T) {
 	// same content, a brand-new commit with a different SHA.
 	commitFile(t, c, "feature.txt", "the feature", "feat: add feature (#7)")
 
-	cleaned := cleanMergedBranches(c, g, trunk)
+	cleaned := cleanMergedBranches(c, g, trunk, false)
 
 	if len(cleaned) != 1 || cleaned[0] != "feature" {
 		t.Fatalf("expected [feature] cleaned, got %v", cleaned)
@@ -297,7 +297,7 @@ func TestSync_KeepsBranchTrackedWhenVacateIsBlocked(t *testing.T) {
 	if !bytes.Contains([]byte(out), []byte("could not be vacated")) {
 		t.Errorf("expected sync to report the blocked vacate, got output:\n%s", out)
 	}
-	if bytes.Contains([]byte(out), []byte("Cleaned up merged branch: feature")) {
+	if bytes.Contains([]byte(out), []byte("Cleaned up branch: feature")) {
 		t.Errorf("sync reported a branch cleaned that git still holds, output:\n%s", out)
 	}
 	if exists, _ := featureCtx.Git.BranchExists("feature"); !exists {
@@ -309,5 +309,122 @@ func TestSync_KeepsBranchTrackedWhenVacateIsBlocked(t *testing.T) {
 	}
 	if !g.Has("feature") {
 		t.Error("branch was dropped from the graph while it still exists in git — stranded")
+	}
+}
+
+// squashMergeFeatureLocally builds the smallest landed-branch shape: a
+// tracked "feature" branch whose single commit re-lands on trunk as a
+// squash-style rewrite, leaving the repo checked out on trunk.
+func squashMergeFeatureLocally(t *testing.T, c *context.Context, trunk string) {
+	t.Helper()
+	if err := Create(c, CreateOpts{Name: "feature"}); err != nil {
+		t.Fatalf("create feature: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "the feature", "feat: add feature")
+	syncTip(t, c, "feature")
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "the feature", "feat: add feature (#7)")
+}
+
+// stubConfirm replaces the deletion prompt for one test, recording every
+// prompt it was shown and answering uniformly.
+func stubConfirm(t *testing.T, answer bool) *[]string {
+	t.Helper()
+	var prompts []string
+	orig := confirmDelete
+	confirmDelete = func(prompt string) (bool, error) {
+		prompts = append(prompts, prompt)
+		return answer, nil
+	}
+	t.Cleanup(func() { confirmDelete = orig })
+	return &prompts
+}
+
+// Deleting a branch is the most destructive thing sync does, so with an
+// operator present it must be their call: a declined prompt leaves the branch
+// in git, in the graph, and out of the cleaned list.
+func TestCleanMergedBranches_DeclinedPrompt_KeepsBranch(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	squashMergeFeatureLocally(t, c, trunk)
+	prompts := stubConfirm(t, false)
+
+	g, _ := c.Store.ReadGraph()
+	cleaned := cleanMergedBranches(c, g, trunk, true)
+
+	if len(cleaned) != 0 {
+		t.Fatalf("declined deletion still reported cleaned: %v", cleaned)
+	}
+	if len(*prompts) != 1 || !strings.Contains((*prompts)[0], "feature") {
+		t.Errorf("expected one prompt naming the branch, got %q", *prompts)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); !exists {
+		t.Error("branch was deleted despite the operator declining")
+	}
+	if !g.Has("feature") {
+		t.Error("declined branch was dropped from the graph")
+	}
+}
+
+func TestCleanMergedBranches_AcceptedPrompt_Deletes(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	squashMergeFeatureLocally(t, c, trunk)
+	prompts := stubConfirm(t, true)
+
+	g, _ := c.Store.ReadGraph()
+	cleaned := cleanMergedBranches(c, g, trunk, true)
+
+	if len(cleaned) != 1 || cleaned[0] != "feature" {
+		t.Fatalf("expected [feature] cleaned, got %v", cleaned)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); exists {
+		t.Error("accepted branch still exists after cleanup")
+	}
+	// The prompt must carry the evidence that nominated the branch, or the
+	// operator is being asked to rubber-stamp a blind deletion.
+	if len(*prompts) != 1 || !strings.Contains((*prompts)[0], trunk) {
+		t.Errorf("expected the prompt to say why the branch is deletable, got %q", *prompts)
+	}
+}
+
+// A branch whose PR was closed WITHOUT merging holds commits that exist on no
+// other ref. It may be offered for deletion when an operator can consent, and
+// must never be touched on the unprompted path.
+func TestCleanMergedBranches_ClosedPR_NeedsExplicitConsent(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	if err := Create(c, CreateOpts{Name: "feature"}); err != nil {
+		t.Fatalf("create feature: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "unmerged work", "feat: never landed")
+	syncTip(t, c, "feature")
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+
+	origClosed := closedUnmergedHeads
+	closedUnmergedHeads = func(string) map[string]int { return map[string]int{"feature": 12} }
+	t.Cleanup(func() { closedUnmergedHeads = origClosed })
+
+	// Unprompted path: the closed PR must not be acted on at all.
+	g, _ := c.Store.ReadGraph()
+	if cleaned := cleanMergedBranches(c, g, trunk, false); len(cleaned) != 0 {
+		t.Fatalf("closed-PR branch deleted without consent: %v", cleaned)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); !exists {
+		t.Fatal("closed-PR branch deleted on the unprompted path")
+	}
+
+	// Prompted and accepted: the branch goes, and the prompt said what the
+	// operator was agreeing to lose.
+	prompts := stubConfirm(t, true)
+	if cleaned := cleanMergedBranches(c, g, trunk, true); len(cleaned) != 1 || cleaned[0] != "feature" {
+		t.Fatalf("expected [feature] cleaned after consent, got %v", cleaned)
+	}
+	if len(*prompts) != 1 || !strings.Contains((*prompts)[0], "closed without merging") {
+		t.Errorf("expected the prompt to warn the PR closed unmerged, got %q", *prompts)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); exists {
+		t.Error("consented closed-PR branch still exists")
 	}
 }
