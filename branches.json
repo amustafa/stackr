@@ -43,7 +43,13 @@
       "parentBranchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
       "branchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
       "children": [],
-      "description": "sr restack with no flags restacks the trunk-to-branch lineage plus the full upstack tree; sr log marks left-behind branches [needs restack]"
+      "description": "sr restack with no flags restacks the trunk-to-branch lineage plus the full upstack tree; sr log marks left-behind branches [needs restack]",
+      "context": [
+        {
+          "key": "approach",
+          "text": "No-flag restack = union of --downstack and --upstack: trunk lineage + full upstack tree. Ancestor siblings stay put; sr log marks them [needs restack]. Only sync sweeps every stack."
+        }
+      ]
     },
     "am/squash-stack": {
       "parentBranchName": "am/sync-confirm-clean",
