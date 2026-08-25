@@ -40,14 +40,14 @@
     },
     "am/squash-stack": {
       "parentBranchName": "am/sync-confirm-clean",
-      "parentBranchRevision": "84d64aedb47b5298b294a12138387b5b03bd7fae",
-      "branchRevision": "4346603b524fc1bfb83d80dd6c720c7f00e02e73",
+      "parentBranchRevision": "863246edc9c5a59f3bce730112c183eb93e90e6c",
+      "branchRevision": "942611a232ac8e10c0011c11aa38158193f4d682",
       "children": []
     },
     "am/sync-confirm-clean": {
       "parentBranchName": "am/sync-skip-local-merge-scan",
-      "parentBranchRevision": "8a7c104015d7544da1941df827946d3c6ca01527",
-      "branchRevision": "84d64aedb47b5298b294a12138387b5b03bd7fae",
+      "parentBranchRevision": "120daf0d4fe0842b3576b807e8bc7017451155c7",
+      "branchRevision": "863246edc9c5a59f3bce730112c183eb93e90e6c",
       "children": [
         "am/squash-stack"
       ],
