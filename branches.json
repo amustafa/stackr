@@ -1,9 +1,18 @@
 {
   "version": 1,
   "branches": {
-    "main": {
+    "am/sync-clean-flag": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "682d35418037222d6492cbffddb3db0cf328bde7",
       "branchRevision": "682d35418037222d6492cbffddb3db0cf328bde7",
       "children": [],
+      "description": "Rename sr sync's --force/-f to --clean, matching what the flag actually does (cleanup consent, not forcing the sync)"
+    },
+    "main": {
+      "branchRevision": "682d35418037222d6492cbffddb3db0cf328bde7",
+      "children": [
+        "am/sync-clean-flag"
+      ],
       "isTrunk": true
     }
   }
