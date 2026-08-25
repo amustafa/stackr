@@ -40,8 +40,8 @@
     },
     "am/squash-stack": {
       "parentBranchName": "am/sync-confirm-clean",
-      "parentBranchRevision": "863246edc9c5a59f3bce730112c183eb93e90e6c",
-      "branchRevision": "942611a232ac8e10c0011c11aa38158193f4d682",
+      "parentBranchRevision": "21dd80e1e54ded2229c55b073eb1ef8928e11b96",
+      "branchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
       "children": []
     },
     "am/sync-confirm-clean": {
