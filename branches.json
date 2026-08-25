@@ -90,7 +90,7 @@
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "am/delete-worktree-aware",
       "parentBranchRevision": "99e1a1d075f3a1f4c7044af48039d054c977014d",
-      "branchRevision": "8a7c104015d7544da1941df827946d3c6ca01527",
+      "branchRevision": "120daf0d4fe0842b3576b807e8bc7017451155c7",
       "children": [
         "am/sync-confirm-clean"
       ],
