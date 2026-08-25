@@ -38,11 +38,20 @@
         ]
       }
     },
+    "am/restack-full-lineage": {
+      "parentBranchName": "am/squash-stack",
+      "parentBranchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
+      "branchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
+      "children": [],
+      "description": "sr restack with no flags restacks the trunk-to-branch lineage plus the full upstack tree; sr log marks left-behind branches [needs restack]"
+    },
     "am/squash-stack": {
       "parentBranchName": "am/sync-confirm-clean",
       "parentBranchRevision": "21dd80e1e54ded2229c55b073eb1ef8928e11b96",
       "branchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
-      "children": []
+      "children": [
+        "am/restack-full-lineage"
+      ]
     },
     "am/sync-confirm-clean": {
       "parentBranchName": "am/sync-skip-local-merge-scan",
