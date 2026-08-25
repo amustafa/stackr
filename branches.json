@@ -40,14 +40,14 @@
     },
     "am/squash-stack": {
       "parentBranchName": "am/sync-confirm-clean",
-      "parentBranchRevision": "370f8104524c26296ff3f8dd66968b8ae1c1f496",
-      "branchRevision": "291fa756c734150a0a7b0214b45d0344ba387a09",
+      "parentBranchRevision": "1b1d07c9a3b9ab68f1e34fbf0f09fdeb16b1dc01",
+      "branchRevision": "089c5960ed549ff8c98ad8010afa8dcc2ab60320",
       "children": []
     },
     "am/sync-confirm-clean": {
       "parentBranchName": "am/sync-skip-local-merge-scan",
-      "parentBranchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
-      "branchRevision": "370f8104524c26296ff3f8dd66968b8ae1c1f496",
+      "parentBranchRevision": "849e0f67e12c57c1cebe0443ac683ad0d5f7e41f",
+      "branchRevision": "1b1d07c9a3b9ab68f1e34fbf0f09fdeb16b1dc01",
       "children": [
         "am/squash-stack"
       ],
@@ -89,8 +89,8 @@
     },
     "am/sync-skip-local-merge-scan": {
       "parentBranchName": "am/delete-worktree-aware",
-      "parentBranchRevision": "13d2b9b02d4385f6fa39a74208f13c45ad13f10b",
-      "branchRevision": "76b0fff515b9bcb1b809e404345215a21bb90ec0",
+      "parentBranchRevision": "48a16e10950a1450487bce061f3ada8b8a47c819",
+      "branchRevision": "849e0f67e12c57c1cebe0443ac683ad0d5f7e41f",
       "children": [
         "am/sync-confirm-clean"
       ],
