@@ -101,6 +101,14 @@
       "url": "https://github.com/amustafa/stackr/pull/14",
       "baseBranch": "spec-6-sr-implement"
     },
+    "am/restack-full-lineage": {
+      "number": 52,
+      "title": "feat(restack): no-flag restack covers the trunk lineage, mark left-behind branches in sr log",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/52",
+      "baseBranch": "am/squash-stack",
+      "stackNumber": 51
+    },
     "am/restack-sync-bugfix": {
       "number": 21,
       "title": "Fix stale-base corruption in squash, restack, and sync",
