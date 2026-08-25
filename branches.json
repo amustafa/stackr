@@ -48,6 +48,16 @@
         {
           "key": "approach",
           "text": "No-flag restack = union of --downstack and --upstack: trunk lineage + full upstack tree. Ancestor siblings stay put; sr log marks them [needs restack]. Only sync sweeps every stack."
+        },
+        {
+          "key": "design",
+          "text": "Internal callers that meant 'branch + descendants' (preflight remediation restack, address-review descendant restack) pinned to Upstack:true so the wider default only changes the CLI",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/preflight.go"
+            }
+          ]
         }
       ]
     },
