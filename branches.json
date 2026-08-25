@@ -41,7 +41,7 @@
     "am/restack-full-lineage": {
       "parentBranchName": "am/squash-stack",
       "parentBranchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
-      "branchRevision": "7c789e02c0867e5d7f7619c9cec78a25c23c98de",
+      "branchRevision": "12795f393981d65b24207cbf10ea093ca93108b1",
       "children": [],
       "description": "sr restack with no flags restacks the trunk-to-branch lineage plus the full upstack tree; sr log marks left-behind branches [needs restack]",
       "context": [
