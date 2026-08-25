@@ -14,7 +14,7 @@ var syncCmd = &cobra.Command{
 		}
 		return engine.Sync(ctx, engine.SyncOpts{
 			Restack: syncFlagRestack,
-			Force:   syncFlagForce,
+			Clean:   syncFlagClean,
 			All:     syncFlagAll,
 		})
 	},
@@ -22,13 +22,13 @@ var syncCmd = &cobra.Command{
 
 var (
 	syncFlagRestack bool
-	syncFlagForce   bool
+	syncFlagClean   bool
 	syncFlagAll     bool
 )
 
 func init() {
 	syncCmd.Flags().BoolVar(&syncFlagRestack, "restack", true, "restack after syncing")
-	syncCmd.Flags().BoolVarP(&syncFlagForce, "force", "f", false, "clean up merged branches without asking")
+	syncCmd.Flags().BoolVar(&syncFlagClean, "clean", false, "clean up merged branches without asking")
 	syncCmd.Flags().BoolVarP(&syncFlagAll, "all", "a", false, "sync all stacks")
 	rootCmd.AddCommand(syncCmd)
 }

@@ -283,7 +283,7 @@ sr commit -a -m "add validation" --context '{"key":"step-3","text":"Implementing
 
 ```
 --restack       Restack after syncing (default: true)
--f, --force     Force sync
+--clean         Clean up merged branches without asking
 -a, --all       Sync all stacks
 ```
 
