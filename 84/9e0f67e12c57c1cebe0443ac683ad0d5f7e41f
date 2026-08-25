@@ -1,0 +1,60 @@
+internal/engine/delete.go
+  s_b4f5394b2431ed::t_88ae5fbc6e40cf 81-84
+  s_b4f5394b2431ed::t_fda6e517298441 5,8,20-28,31,38,43,46,46-56,49-54,59-72,59-62,64-68,70-72,75-80,75-76,78-80,93,100,110,112-117,119-128,119-125,127-128,132,134-138,142-208,142-144,145-208
+  s_b4f5394b2431ed::t_e4994299ab7f6d 73-74
+  s_b4f5394b2431ed::t_86b8c29fbb4c8f 85-87
+  s_b4f5394b2431ed::t_710f0b6570af9c 91-92
+  s_b4f5394b2431ed::t_e4a6e89c789aa8 94-99
+  s_b4f5394b2431ed::t_c455cad9e3e815 101-103
+  s_b4f5394b2431ed::t_1fa774a75d1c89 111
+  s_b4f5394b2431ed::t_218b836186a8fb 88-89,104-107
+cmd/delete.go
+  s_b4f5394b2431ed::t_9ce70f810c2a0b 4-6,8,15,27-41,43-48
+internal/ui/selector.go
+  s_b4f5394b2431ed::t_7b451b5f3b0b39 78-83,91
+  s_b4f5394b2431ed::t_a464abe27dea30 104-113
+internal/engine/delete_test.go
+  s_b4f5394b2431ed::t_7d9161d8a8108a 1-51,1-8,11-12,28-51,53-301,53-185,268-301
+internal/engine/sync.go
+  s_81fe755eeb6710::t_a6afcc5788b10e 184
+  s_81fe755eeb6710::t_27e5ccacf7f1e5 166
+  s_81fe755eeb6710::t_f9df632a086059 257
+  s_81fe755eeb6710::t_e99d41fa6b88ed 280-292
+internal/git/refs.go
+  s_81fe755eeb6710::t_8da28bff942aa5 118-124,131-133,137-154,157-160
+internal/engine/base_test.go
+  s_81fe755eeb6710::t_59bd193242f09b 347
+  s_81fe755eeb6710::t_0643da6a5bcd96 362
+  s_81fe755eeb6710::t_6bbd5ebfc6f4d8 261,266-293
+  s_81fe755eeb6710::t_8caabd66062ab6 330
+  s_81fe755eeb6710::t_b47c9f30a67047 294-295
+internal/engine/github.go
+  s_81fe755eeb6710::t_e3fe0f492293dc 155-160
+  s_81fe755eeb6710::t_6113fde1d0a41f 150-154,164
+  s_81fe755eeb6710::t_aacbdb7ae8d45d 188,195,202
+  s_81fe755eeb6710::t_ca605debd641b2 180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "849e0f67e12c57c1cebe0443ac683ad0d5f7e41f",
+  "prompts": {},
+  "sessions": {
+    "s_81fe755eeb6710": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "960f45ce-c4b3-42f7-8f15-98fa0304618a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    },
+    "s_b4f5394b2431ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93e37f0b-cff2-44d5-90e6-598f0426fb92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
