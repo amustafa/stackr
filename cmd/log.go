@@ -29,6 +29,9 @@ var logCmd = &cobra.Command{
 			CurrentBranch: current,
 			ShowAll:       logFlagAll,
 			Reverse:       logFlagReverse,
+			NeedsRestackFn: func(branch string) bool {
+				return engine.NeedsRestack(ctx, g, branch)
+			},
 		}
 
 		// Annotate branches with their PR and GitHub stack. Best-effort: a repo

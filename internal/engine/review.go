@@ -346,7 +346,7 @@ func reviewInteractive(c *context.Context, opts ReviewOpts) error {
 					b := g.Branches[br.Branch]
 					if b != nil && len(b.Children) > 0 {
 						fmt.Println("  Restacking descendants...")
-						if err := Restack(c, RestackOpts{}); err != nil {
+						if err := Restack(c, RestackOpts{Upstack: true}); err != nil {
 							return fmt.Errorf("restack failed: %w", err)
 						}
 					}

@@ -92,6 +92,66 @@ func TestRestack_Downstack_ExcludesUpstack(t *testing.T) {
 	}
 }
 
+// A no-flag restack is the union of --downstack and --upstack: the straight
+// lineage down to trunk, the branch itself, and the full upstack subtree.
+// Siblings hanging off an ancestor belong to a different lineage and stay put.
+//
+// Topology: trunk -> a -> b -> c -> d, with forks b -> b2 and c -> c2.
+// Restacking from `c` must move a, b, c, d, and c2 — and must not touch b2.
+func TestRestack_Default_LineageAndUpstack_NotAncestorSiblings(t *testing.T) {
+	c, _ := setupRestackStack(t) // trunk -> a -> b -> c, trunk already advanced
+
+	fork := func(parent, name string) {
+		t.Helper()
+		if err := c.Git.Checkout(parent); err != nil {
+			t.Fatalf("checkout %s: %v", parent, err)
+		}
+		if err := Create(c, CreateOpts{Name: name}); err != nil {
+			t.Fatalf("Create %s: %v", name, err)
+		}
+		if _, err := c.Git.RunGitCapture("commit", "--allow-empty", "-m", name); err != nil {
+			t.Fatalf("commit on %s: %v", name, err)
+		}
+		g, _ := c.Store.ReadGraph()
+		rev, _ := c.Git.RevParse(name)
+		g.Branches[name].BranchRevision = rev
+		c.Store.WriteGraph(g)
+	}
+	fork("c", "d")
+	fork("b", "b2")
+	fork("c", "c2")
+
+	before := map[string]string{}
+	for _, name := range []string{"a", "b", "c", "d", "b2", "c2"} {
+		before[name], _ = c.Git.RevParse(name)
+	}
+
+	if err := Restack(c, RestackOpts{Branch: "c"}); err != nil {
+		t.Fatalf("default restack: %v", err)
+	}
+
+	for _, name := range []string{"a", "b", "c", "d", "c2"} {
+		if after, _ := c.Git.RevParse(name); after == before[name] {
+			t.Errorf("default restack from c did not rebase %s (tip unchanged %s)", name, before[name])
+		}
+	}
+	if after, _ := c.Git.RevParse("b2"); after != before["b2"] {
+		t.Errorf("default restack from c rebased ancestor-sibling b2: %s -> %s", before["b2"], after)
+	}
+
+	// Everything restacked must actually sit on its parent's new tip; the
+	// untouched sibling must now report that it needs a restack.
+	g, _ := c.Store.ReadGraph()
+	for _, name := range []string{"a", "b", "c", "d", "c2"} {
+		if NeedsRestack(c, g, name) {
+			t.Errorf("%s still needs a restack after the default restack", name)
+		}
+	}
+	if !NeedsRestack(c, g, "b2") {
+		t.Error("b2 was left behind by design but does not report needing a restack")
+	}
+}
+
 // A branch checked out in another (clean) worktree must be restacked in that
 // worktree rather than failing on git's "already used by worktree" lock, and
 // must never leave a bogus rebase state that `sr continue` would later act on.

@@ -120,6 +120,22 @@ func isStackedOn(c *context.Context, branch, parentTip string) bool {
 	return ok
 }
 
+// NeedsRestack reports whether a branch is no longer built on its parent's
+// current tip. Trunk never needs a restack, and a branch whose parent can't
+// be resolved is reported as fine — display callers (`sr log`) must not turn
+// a lookup hiccup into a false alarm.
+func NeedsRestack(c *context.Context, g *graph.Graph, branch string) bool {
+	b := g.Branches[branch]
+	if b == nil || b.IsTrunk {
+		return false
+	}
+	parentRev, err := c.Git.RevParse(b.ParentBranchName)
+	if err != nil {
+		return false
+	}
+	return !isStackedOn(c, branch, parentRev)
+}
+
 // setBase re-points a branch's recorded base, validating that the result still
 // satisfies the invariant. A base that is not an ancestor of the branch makes
 // the recorded commit range meaningless, so it is rejected rather than stored.
