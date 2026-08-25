@@ -47,7 +47,7 @@
     "am/sync-confirm-clean": {
       "parentBranchName": "am/sync-skip-local-merge-scan",
       "parentBranchRevision": "120daf0d4fe0842b3576b807e8bc7017451155c7",
-      "branchRevision": "863246edc9c5a59f3bce730112c183eb93e90e6c",
+      "branchRevision": "21dd80e1e54ded2229c55b073eb1ef8928e11b96",
       "children": [
         "am/squash-stack"
       ],
