@@ -1,0 +1,25 @@
+README.md
+  s_f7ddb01813bd55::t_2b32567ec0c012 286
+internal/engine/sync.go
+  s_f7ddb01813bd55::t_808cdd26a31062 15
+  s_f7ddb01813bd55::t_2a4bfa6d2bde69 57-58
+cmd/sync.go
+  s_f7ddb01813bd55::t_b916a79461c409 17
+  s_f7ddb01813bd55::t_13abc366ea9ec4 25,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ceb29ccf368fd6ba92079110788fcf18f0759522",
+  "prompts": {},
+  "sessions": {
+    "s_f7ddb01813bd55": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b6875dda-23b0-4d33-9473-5147dc40a0eb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
