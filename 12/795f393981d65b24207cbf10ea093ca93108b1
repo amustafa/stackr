@@ -1,0 +1,36 @@
+internal/engine/restack.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 98-107,109
+internal/engine/base.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 123-138
+cmd/restack.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 12-17
+internal/engine/restack_test.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 95-154
+internal/graph/graph_test.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 133-149
+internal/engine/review.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 349
+internal/engine/preflight.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 304-306
+cmd/log.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 32-34
+internal/graph/render.go
+  s_d1cc16addf3ae6::t_24e1c2c5f70076 19-23,182-183
+  s_d1cc16addf3ae6::t_738a6677b7c534 184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "12795f393981d65b24207cbf10ea093ca93108b1",
+  "prompts": {},
+  "sessions": {
+    "s_d1cc16addf3ae6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f700fc3-05cc-479b-9303-942e3022b72b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
