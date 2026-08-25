@@ -301,7 +301,9 @@ func restackAfterRemediation(c *context.Context, opts SubmitOpts, name string,
 		return err
 	}
 
-	if err := Restack(c, RestackOpts{Branch: name, SkipBlocked: true}); err != nil {
+	// Upstack only: the branch's ancestors were not remediated and must not be
+	// swept into a rebase mid-submit by the wider no-scope default.
+	if err := Restack(c, RestackOpts{Branch: name, Upstack: true, SkipBlocked: true}); err != nil {
 		return err
 	}
 

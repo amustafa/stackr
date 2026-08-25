@@ -16,6 +16,11 @@ type RenderOpts struct {
 	// GitHub stack, ...). The graph package deliberately knows nothing about
 	// pull requests; callers that do pass the formatting in here.
 	AnnotateFn func(branch string) string
+
+	// NeedsRestackFn reports whether a branch is no longer built on its
+	// parent's tip. The graph package can't answer that itself — it takes
+	// git ancestry, not recorded revisions — so callers pass the check in.
+	NeedsRestackFn func(branch string) bool
 }
 
 // CommitInfo holds info about a single commit for rendering.
@@ -173,6 +178,9 @@ func (g *Graph) formatBranch(name string, opts RenderOpts) string {
 	b := g.Branches[name]
 	if b != nil && b.Frozen {
 		suffix += " [frozen]"
+	}
+	if opts.NeedsRestackFn != nil && opts.NeedsRestackFn(name) {
+		suffix += " [needs restack]"
 	}
 
 	if opts.AnnotateFn != nil {

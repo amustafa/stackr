@@ -95,11 +95,18 @@ func Restack(c *context.Context, opts RestackOpts) error {
 		}
 
 	default:
-		// No scope flag: restack the current branch and everything upstack.
-		toRestack = g.UpstackTopo(branch)
-		if !g.IsTrunk(branch) {
-			toRestack = append([]string{branch}, toRestack...)
+		// No scope flag: the branch's straight lineage down to trunk, the
+		// branch itself, and everything upstack — the union of --downstack and
+		// --upstack. Siblings hanging off an ancestor are NOT restacked (only
+		// `sr sync` sweeps every stack), which can leave them needing a
+		// restack of their own.
+		ds := g.Downstack(branch)
+		for i := len(ds) - 1; i >= 0; i-- {
+			if !g.IsTrunk(ds[i]) {
+				toRestack = append(toRestack, ds[i])
+			}
 		}
+		toRestack = append(toRestack, g.UpstackTopo(branch)...)
 	}
 
 	if len(toRestack) == 0 {

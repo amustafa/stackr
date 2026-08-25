@@ -9,6 +9,12 @@ var restackCmd = &cobra.Command{
 	Use:     "restack",
 	Aliases: []string{"r"},
 	Short:   "Rebase the stack so branches are correctly ordered",
+	Long: `Rebase branches so each sits on its parent's tip.
+
+By default restacks the branch's straight lineage down to trunk, the branch
+itself, and everything stacked on top of it (the union of --downstack and
+--upstack). Branches forking off an ancestor are left alone — sr log marks
+them [needs restack] — and only sr sync sweeps every stack.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := ctx.RequireInit(); err != nil {
 			return err

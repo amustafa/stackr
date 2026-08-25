@@ -130,6 +130,23 @@ func TestRenderLinearStack(t *testing.T) {
 	}
 }
 
+func TestRenderNeedsRestackMarker(t *testing.T) {
+	g := New()
+	g.AddTrunk("main", "aaa")
+	g.AddBranch("feat-a", "main", "aaa", "bbb")
+	g.AddBranch("feat-b", "feat-a", "bbb", "ccc")
+
+	got := g.RenderTree(RenderOpts{
+		CurrentBranch:  "feat-b",
+		ShowAll:        true,
+		NeedsRestackFn: func(branch string) bool { return branch == "feat-a" },
+	})
+	expect := "◉ feat-b ←\n│\n◯ feat-a [needs restack]\n│\n◯ main (trunk)\n"
+	if got != expect {
+		t.Fatalf("needs-restack render mismatch:\ngot:\n%s\nexpect:\n%s", got, expect)
+	}
+}
+
 func TestRenderBranchingStack(t *testing.T) {
 	// Tree:
 	//   main (trunk)
