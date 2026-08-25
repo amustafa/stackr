@@ -163,7 +163,7 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []string {
 	// One batched query instead of one `gh pr view` per branch. Best-effort:
 	// offline, or without gh, we fall through to the local patch-id test.
-	mergedPRs := ghMergedHeadBranches()
+	mergedPRs, forgeAnswered := ghMergedHeadBranches(c.Git.Dir)
 
 	// Sort for deterministic output and stable parent-before-child removal.
 	names := make([]string, 0, len(g.Branches))
@@ -181,7 +181,7 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 			continue // already removed as part of an earlier reparent
 		}
 
-		if !branchHasLanded(c, name, b, trunk, mergedPRs) {
+		if !branchHasLanded(c, name, b, trunk, mergedPRs, forgeAnswered) {
 			continue
 		}
 
@@ -254,7 +254,7 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string) []str
 
 // branchHasLanded reports whether a branch's work is already present on trunk,
 // by whichever merge strategy was used.
-func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trunk string, mergedPRs map[string]bool) bool {
+func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trunk string, mergedPRs map[string]bool, forgeAnswered bool) bool {
 	base, baseErr := resolveBase(c, name, b)
 
 	// A branch with no commits of its own has not landed — it is simply empty.
@@ -275,6 +275,19 @@ func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trun
 	//    merges, which rewrite commits and defeat every local test.
 	if mergedPRs[name] {
 		return true
+	}
+
+	// When the forge answered, its "not merged" is as authoritative as its
+	// "merged", and the patch-equivalence fallbacks below are pure waste: they
+	// scan every trunk commit since the branch's base, for every tracked
+	// branch, on every sync — which balloons to minutes once branches sit
+	// unrestacked behind an active trunk. Stop here instead. The cost is a
+	// branch whose PR fell out of the query's 200-most-recently-updated
+	// window: it stays tracked until gh is unavailable or the branch is
+	// deleted by hand, but ancestry (test 1) still catches non-rewriting
+	// merges of any age.
+	if forgeAnswered {
+		return false
 	}
 
 	// 3. Local fallback: every commit the branch owns already has a
