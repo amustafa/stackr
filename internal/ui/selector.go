@@ -75,6 +75,12 @@ func (m selectorModel) View() string {
 // Select presents an interactive selector and returns the chosen item.
 // If there is only one item, it is returned immediately without showing a TUI.
 func Select(title string, items []string) (string, error) {
+	return SelectWithDefault(title, items, "")
+}
+
+// SelectWithDefault is Select with the cursor starting on def (when present in
+// items) instead of the first item.
+func SelectWithDefault(title string, items []string, def string) (string, error) {
 	if len(items) == 0 {
 		return "", fmt.Errorf("no items to select from")
 	}
@@ -82,7 +88,7 @@ func Select(title string, items []string) (string, error) {
 		return items[0], nil
 	}
 
-	m := selectorModel{title: title, items: items}
+	m := selectorModel{title: title, items: items, cursor: defaultIndex(items, def)}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	result, err := p.Run()
 	if err != nil {
@@ -94,4 +100,14 @@ func Select(title string, items []string) (string, error) {
 		return "", ErrCancelled
 	}
 	return final.selected, nil
+}
+
+// defaultIndex returns the index of def in items, or 0 if absent.
+func defaultIndex(items []string, def string) int {
+	for i, item := range items {
+		if item == def {
+			return i
+		}
+	}
+	return 0
 }
