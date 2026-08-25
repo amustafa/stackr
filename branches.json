@@ -4,7 +4,7 @@
     "am/delete-worktree-aware": {
       "parentBranchName": "main",
       "parentBranchRevision": "d102fbec421a1b8b1879992dbf686597db4e3874",
-      "branchRevision": "48a16e10950a1450487bce061f3ada8b8a47c819",
+      "branchRevision": "99e1a1d075f3a1f4c7044af48039d054c977014d",
       "children": [
         "am/sync-skip-local-merge-scan"
       ],
