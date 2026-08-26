@@ -12,7 +12,7 @@ import (
 // SyncOpts controls sync behavior.
 type SyncOpts struct {
 	Restack bool
-	Force   bool
+	Clean   bool
 	All     bool
 }
 
@@ -54,8 +54,8 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	g.Branches[trunk].BranchRevision = trunkRev
 
 	// Clean up merged branches, asking the operator first when there is one
-	// to ask; --force deletes without prompting.
-	cleaned := cleanMergedBranches(c, g, trunk, c.Interactive && !opts.Force)
+	// to ask; --clean deletes without prompting.
+	cleaned := cleanMergedBranches(c, g, trunk, c.Interactive && !opts.Clean)
 	for _, name := range cleaned {
 		if !c.Quiet {
 			fmt.Printf("Cleaned up branch: %s\n", name)
