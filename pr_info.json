@@ -156,6 +156,13 @@
       "baseBranch": "am/shell-hook-cd-file",
       "stackNumber": 44
     },
+    "am/sync-clean-flag": {
+      "number": 53,
+      "title": "Rename sr sync's --force/-f flag to --clean",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/53",
+      "baseBranch": "main"
+    },
     "am/sync-confirm-clean": {
       "number": 50,
       "title": "feat(sync): ask before deleting branches, and never mistake a parked branch for merged",
