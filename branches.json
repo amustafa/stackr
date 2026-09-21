@@ -3,8 +3,17 @@
   "branches": {
     "main": {
       "branchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
-      "children": [],
+      "children": [
+        "restack-already-current-summary"
+      ],
       "isTrunk": true
+    },
+    "restack-already-current-summary": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
+      "branchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
+      "children": [],
+      "description": "sr restack reports branches it skipped as already stacked on their parent, instead of silently omitting them"
     }
   }
 }
