@@ -28,7 +28,13 @@
       "parentBranchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
       "branchRevision": "4ddafba749c51783c3ca6e8f9a9e72258848cfe9",
       "children": [],
-      "description": "sr sync output reads as a short report: quiet git plumbing, trunk delta, cleaned branches with reasons, restack summary"
+      "description": "sr sync output reads as a short report: quiet git plumbing, trunk delta, cleaned branches with reasons, restack summary",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Quiet the git plumbing (fetch/merge/rebase/branch -D --quiet, captured rebase) and have sync state trunk delta, deletions with reasons, restack summary in its own words"
+        }
+      ]
     }
   }
 }
