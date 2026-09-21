@@ -1,0 +1,39 @@
+internal/git/rebase.go
+  s_fe7988c305d2e0::t_00d0b4146f4d36 18-24
+  s_fe7988c305d2e0::t_6d78c2c47a9a10 3-8,25-26,30-35
+internal/git/branch.go
+  s_fe7988c305d2e0::t_ce623a31088513 38-44
+internal/engine/restack.go
+  s_fe7988c305d2e0::t_6d78c2c47a9a10 6,269,273,275,286,297-300,303,306-314,414-435
+  s_fe7988c305d2e0::t_f3bddff5100d61 436
+internal/engine/sync.go
+  s_fe7988c305d2e0::t_ce623a31088513 45,57-62,64-66,68,70,78-79,92,114-125,140,158,168,191,210,280,298,303-306
+  s_fe7988c305d2e0::t_f4de58b73d2cd1 307-308
+internal/git/remote.go
+  s_fe7988c305d2e0::t_ce623a31088513 140-142,144
+internal/git/refs.go
+  s_fe7988c305d2e0::t_ce623a31088513 73-80
+  s_fe7988c305d2e0::t_e96986253ebdd6 7
+  s_fe7988c305d2e0::t_797a8189cd32e7 81-82
+internal/engine/sync_test.go
+  s_fe7988c305d2e0::t_b404f438368107 431-504
+  s_fe7988c305d2e0::t_ce623a31088513 77,300,378,421
+internal/git/merge.go
+  s_fe7988c305d2e0::t_6d78c2c47a9a10 114-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4ddafba749c51783c3ca6e8f9a9e72258848cfe9",
+  "prompts": {},
+  "sessions": {
+    "s_fe7988c305d2e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2228f3b7-a132-4947-82dd-b70120058d82",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
