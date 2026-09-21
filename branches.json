@@ -13,7 +13,13 @@
       "parentBranchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
       "branchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
       "children": [],
-      "description": "sr restack reports branches it skipped as already stacked on their parent, instead of silently omitting them"
+      "description": "sr restack reports branches it skipped as already stacked on their parent, instead of silently omitting them",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Counts, not names, for already-current branches: names would flood sr sync -a over many stacks; the count alone makes the summary add up to sr log"
+        }
+      ]
     }
   }
 }
