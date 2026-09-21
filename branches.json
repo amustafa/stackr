@@ -33,6 +33,10 @@
         {
           "key": "approach",
           "text": "Quiet the git plumbing (fetch/merge/rebase/branch -D --quiet, captured rebase) and have sync state trunk delta, deletions with reasons, restack summary in its own words"
+        },
+        {
+          "key": "design",
+          "text": "Rebase output is captured, not forwarded: on a skipped conflict only the conflicted files are reported; on a paused conflict only CONFLICT lines print. git's hints prescribe raw git rebase --continue, which desyncs the graph"
         }
       ]
     }
