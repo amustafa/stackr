@@ -26,7 +26,7 @@
     "sync-readable-output": {
       "parentBranchName": "restack-already-current-summary",
       "parentBranchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
-      "branchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
+      "branchRevision": "4ddafba749c51783c3ca6e8f9a9e72258848cfe9",
       "children": [],
       "description": "sr sync output reads as a short report: quiet git plumbing, trunk delta, cleaned branches with reasons, restack summary"
     }
