@@ -12,7 +12,9 @@
       "parentBranchName": "main",
       "parentBranchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
       "branchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
-      "children": [],
+      "children": [
+        "sync-readable-output"
+      ],
       "description": "sr restack reports branches it skipped as already stacked on their parent, instead of silently omitting them",
       "context": [
         {
@@ -20,6 +22,13 @@
           "text": "Counts, not names, for already-current branches: names would flood sr sync -a over many stacks; the count alone makes the summary add up to sr log"
         }
       ]
+    },
+    "sync-readable-output": {
+      "parentBranchName": "restack-already-current-summary",
+      "parentBranchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
+      "branchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
+      "children": [],
+      "description": "sr sync output reads as a short report: quiet git plumbing, trunk delta, cleaned branches with reasons, restack summary"
     }
   }
 }
