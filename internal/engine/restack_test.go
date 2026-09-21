@@ -2,6 +2,7 @@ package engine
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
@@ -346,5 +347,91 @@ func writeAndCommit(t *testing.T, c *context.Context, name, content, msg string)
 	}
 	if err := c.Git.RunGit("commit", "-m", msg); err != nil {
 		t.Fatalf("commit %q: %v", msg, err)
+	}
+}
+
+// A branch already sitting on its parent's tip is skipped without a
+// "Restacking" line. In a long stack that silence reads as the restack having
+// stopped short — the lower branches simply vanish from the output — so the
+// summary must account for them.
+func TestRestack_ReportsAlreadyCurrentBranches(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+	c.Quiet = false
+
+	// Bring `a` and `b` up to date by hand; only `c` still needs to move.
+	// Restack `a` and `b`, then advance `b` so `c` is stale again.
+	if err := Restack(c, RestackOpts{Branch: "b", Downstack: true}); err != nil {
+		t.Fatalf("prime restack: %v", err)
+	}
+	c.Git.Checkout("b")
+	if _, err := c.Git.RunGitCapture("commit", "--allow-empty", "-m", "b moves"); err != nil {
+		t.Fatalf("commit on b: %v", err)
+	}
+	c.Git.Checkout(trunk)
+
+	out := captureStdout(t, func() {
+		if err := Restack(c, RestackOpts{Branch: "a"}); err != nil {
+			t.Fatalf("Restack: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Restacking c onto b") {
+		t.Errorf("expected c to be restacked, got:\n%s", out)
+	}
+	if strings.Contains(out, "Restacking a onto") || strings.Contains(out, "Restacking b onto") {
+		t.Errorf("a and b were already current and must not be rebased, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Restacked 1 branch; 2 already up to date") {
+		t.Errorf("expected a summary accounting for the silent branches, got:\n%s", out)
+	}
+	if strings.Contains(out, "Switched to branch") {
+		t.Errorf("returning to the original branch must be silent, got:\n%s", out)
+	}
+}
+
+// When every branch is already current the restack does nothing visible, and
+// must say so rather than exit in silence.
+func TestRestack_NothingToDo_SaysSo(t *testing.T) {
+	c, _ := setupRestackStack(t)
+	if err := Restack(c, RestackOpts{Branch: "a"}); err != nil {
+		t.Fatalf("prime restack: %v", err)
+	}
+	c.Quiet = false
+
+	out := captureStdout(t, func() {
+		if err := Restack(c, RestackOpts{Branch: "a"}); err != nil {
+			t.Fatalf("Restack: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Nothing to restack: 3 branches already up to date") {
+		t.Errorf("expected an all-current summary, got:\n%s", out)
+	}
+}
+
+// A restack that left branches behind still accounts for the current ones, so
+// the three counts add up to the stack the user sees in `sr log`.
+func TestRestack_SummaryCountsSkippedAndCurrent(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+	if err := Restack(c, RestackOpts{Branch: "a"}); err != nil {
+		t.Fatalf("prime restack: %v", err)
+	}
+	// Freeze b: it and c are walled off. Advance trunk so a needs a restack.
+	g, _ := c.Store.ReadGraph()
+	g.Branches["b"].Frozen = true
+	c.Store.WriteGraph(g)
+	c.Git.Checkout(trunk)
+	c.Git.RunGitCapture("commit", "--allow-empty", "-m", "trunk moves again")
+	c.Quiet = false
+
+	out := captureStdout(t, func() {
+		if err := Restack(c, RestackOpts{Branch: trunk}); err != nil {
+			t.Fatalf("Restack: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Restacked 1 branch; left 2 unrestacked:") {
+		t.Errorf("expected restacked+skipped summary, got:\n%s", out)
+	}
+	if !strings.Contains(out, "- b (frozen)") {
+		t.Errorf("expected frozen b listed, got:\n%s", out)
 	}
 }
