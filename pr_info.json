@@ -210,6 +210,14 @@
       "baseBranch": "gh-stacks-api",
       "stackNumber": 28
     },
+    "restack-already-current-summary": {
+      "number": 54,
+      "title": "feat(restack): account for already-current branches in the summary",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/54",
+      "baseBranch": "main",
+      "stackNumber": 56
+    },
     "skill-prompt-block": {
       "number": 10,
       "title": "Inject always-on stackr pointer block into CLAUDE.md on install",
@@ -245,6 +253,14 @@
       "url": "https://github.com/amustafa/stackr/pull/29",
       "baseBranch": "gh-stacks-display",
       "stackNumber": 28
+    },
+    "sync-readable-output": {
+      "number": 55,
+      "title": "feat(sync): make the output a report, not a git transcript",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/55",
+      "baseBranch": "restack-already-current-summary",
+      "stackNumber": 56
     }
   }
 }
