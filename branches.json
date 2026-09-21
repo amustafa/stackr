@@ -37,6 +37,10 @@
         {
           "key": "design",
           "text": "Rebase output is captured, not forwarded: on a skipped conflict only the conflicted files are reported; on a paused conflict only CONFLICT lines print. git's hints prescribe raw git rebase --continue, which desyncs the graph"
+        },
+        {
+          "key": "risk",
+          "text": "Checkout/DeleteBranch keep their chatty forms for sr up/down/pop, which rely on git's message as their only feedback; only internal return-to-origin and sync deletion use the quiet variants"
         }
       ]
     }
