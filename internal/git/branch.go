@@ -35,6 +35,13 @@ func (r *Runner) DeleteBranch(name string, force bool) error {
 	return r.RunGit("branch", flag, name)
 }
 
+// DeleteBranchQuiet force-deletes a local branch without git's
+// "Deleted branch x (was sha)" line, for callers that report the deletion in
+// their own words.
+func (r *Runner) DeleteBranchQuiet(name string) error {
+	return r.RunGit("branch", "--quiet", "-D", name)
+}
+
 // RenameBranch renames a branch.
 func (r *Runner) RenameBranch(oldName, newName string) error {
 	return r.RunGit("branch", "-m", oldName, newName)
