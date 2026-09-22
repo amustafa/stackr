@@ -2,47 +2,9 @@
   "version": 1,
   "branches": {
     "main": {
-      "branchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
-      "children": [
-        "restack-already-current-summary"
-      ],
-      "isTrunk": true
-    },
-    "restack-already-current-summary": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "68a1aab8a7ce287924b71b1a517412fa8526fb9b",
-      "branchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
-      "children": [
-        "sync-readable-output"
-      ],
-      "description": "sr restack reports branches it skipped as already stacked on their parent, instead of silently omitting them",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Counts, not names, for already-current branches: names would flood sr sync -a over many stacks; the count alone makes the summary add up to sr log"
-        }
-      ]
-    },
-    "sync-readable-output": {
-      "parentBranchName": "restack-already-current-summary",
-      "parentBranchRevision": "30b6c07aff7a6c716a138ba408a94a4321fe16af",
-      "branchRevision": "4ddafba749c51783c3ca6e8f9a9e72258848cfe9",
+      "branchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
       "children": [],
-      "description": "sr sync output reads as a short report: quiet git plumbing, trunk delta, cleaned branches with reasons, restack summary",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Quiet the git plumbing (fetch/merge/rebase/branch -D --quiet, captured rebase) and have sync state trunk delta, deletions with reasons, restack summary in its own words"
-        },
-        {
-          "key": "design",
-          "text": "Rebase output is captured, not forwarded: on a skipped conflict only the conflicted files are reported; on a paused conflict only CONFLICT lines print. git's hints prescribe raw git rebase --continue, which desyncs the graph"
-        },
-        {
-          "key": "risk",
-          "text": "Checkout/DeleteBranch keep their chatty forms for sr up/down/pop, which rely on git's message as their only feedback; only internal return-to-origin and sync deletion use the quiet variants"
-        }
-      ]
+      "isTrunk": true
     }
   }
 }
