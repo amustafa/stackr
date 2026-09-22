@@ -111,6 +111,15 @@ func (r *Runner) IsCherryPickInProgress() bool {
 	return err == nil
 }
 
+// ConflictedFiles lists the paths the index holds as unmerged.
+func (r *Runner) ConflictedFiles() []string {
+	out, err := r.RunGitCapture("diff", "--name-only", "--diff-filter=U")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return nil
+	}
+	return strings.Split(strings.TrimSpace(out), "\n")
+}
+
 // HasConflicts reports whether the index holds unmerged paths.
 func (r *Runner) HasConflicts() bool {
 	out, err := r.RunGitCapture("diff", "--name-only", "--diff-filter=U")

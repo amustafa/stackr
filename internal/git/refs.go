@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -67,6 +68,16 @@ func (r *Runner) HasCommitsSince(base, branch string) (bool, error) {
 		return false, err
 	}
 	return strings.TrimSpace(out) != "0", nil
+}
+
+// CountCommits returns the number of commits reachable from tip but not
+// from base — the size of base..tip.
+func (r *Runner) CountCommits(base, tip string) (int, error) {
+	out, err := r.RunGitCapture("rev-list", "--count", base+".."+tip)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(out))
 }
 
 // ObjectExists reports whether sha resolves to an existing commit.

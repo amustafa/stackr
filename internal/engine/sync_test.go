@@ -74,7 +74,7 @@ func TestCleanMergedBranches_RemovesWorktreeOfMergedBranch(t *testing.T) {
 
 	cleaned := cleanMergedBranches(c, g, trunk, false)
 
-	if len(cleaned) != 1 || cleaned[0] != "feature" {
+	if len(cleaned) != 1 || cleaned[0].Name != "feature" {
 		t.Fatalf("expected [feature] cleaned, got %v", cleaned)
 	}
 	if exists, _ := c.Git.BranchExists("feature"); exists {
@@ -297,7 +297,7 @@ func TestSync_KeepsBranchTrackedWhenVacateIsBlocked(t *testing.T) {
 	if !bytes.Contains([]byte(out), []byte("could not be vacated")) {
 		t.Errorf("expected sync to report the blocked vacate, got output:\n%s", out)
 	}
-	if bytes.Contains([]byte(out), []byte("Cleaned up branch: feature")) {
+	if bytes.Contains([]byte(out), []byte("Deleted feature")) {
 		t.Errorf("sync reported a branch cleaned that git still holds, output:\n%s", out)
 	}
 	if exists, _ := featureCtx.Git.BranchExists("feature"); !exists {
@@ -375,7 +375,7 @@ func TestCleanMergedBranches_AcceptedPrompt_Deletes(t *testing.T) {
 	g, _ := c.Store.ReadGraph()
 	cleaned := cleanMergedBranches(c, g, trunk, true)
 
-	if len(cleaned) != 1 || cleaned[0] != "feature" {
+	if len(cleaned) != 1 || cleaned[0].Name != "feature" {
 		t.Fatalf("expected [feature] cleaned, got %v", cleaned)
 	}
 	if exists, _ := c.Git.BranchExists("feature"); exists {
@@ -418,7 +418,7 @@ func TestCleanMergedBranches_ClosedPR_NeedsExplicitConsent(t *testing.T) {
 	// Prompted and accepted: the branch goes, and the prompt said what the
 	// operator was agreeing to lose.
 	prompts := stubConfirm(t, true)
-	if cleaned := cleanMergedBranches(c, g, trunk, true); len(cleaned) != 1 || cleaned[0] != "feature" {
+	if cleaned := cleanMergedBranches(c, g, trunk, true); len(cleaned) != 1 || cleaned[0].Name != "feature" {
 		t.Fatalf("expected [feature] cleaned after consent, got %v", cleaned)
 	}
 	if len(*prompts) != 1 || !strings.Contains((*prompts)[0], "closed without merging") {
@@ -426,5 +426,79 @@ func TestCleanMergedBranches_ClosedPR_NeedsExplicitConsent(t *testing.T) {
 	}
 	if exists, _ := c.Git.BranchExists("feature"); exists {
 		t.Error("consented closed-PR branch still exists")
+	}
+}
+
+// Sync's output is a short report in the user's terms — how far trunk moved,
+// which branches were deleted and why, what was restacked — not a transcript
+// of the git commands it ran. The transcript is what made `sr sync` unreadable:
+// fetch ref updates, a fast-forward diffstat, "Successfully rebased" per
+// branch, "Deleted branch", and a final "Switched to branch" buried the three
+// facts the user actually needed.
+func TestSync_OutputIsAReportNotAGitTranscript(t *testing.T) {
+	c, _, _, _ := setupSquashMergedFeatureWorktree(t)
+	c.Quiet = false
+
+	// A second, unmerged branch on trunk so there is something to restack.
+	if err := Create(c, CreateOpts{Name: "other"}); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+	commitFile(t, c, "other.txt", "other work", "feat: other")
+	syncTip(t, c, "other")
+	if err := c.Git.Checkout("main"); err != nil {
+		t.Fatalf("checkout main: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := Sync(c, SyncOpts{Restack: true}); err != nil {
+			t.Fatalf("Sync: %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		"main: 1 new commit",
+		"Deleted feature (",
+		"Restacking other onto main",
+		"Sync complete",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in sync output, got:\n%s", want, out)
+		}
+	}
+	for _, noise := range []string{
+		"Successfully rebased",
+		"Rebasing (",
+		"Deleted branch",
+		"Fast-forward",
+		"Switched to branch",
+		"Already on",
+		"Restacking...",
+		"Cleaned up branch",
+	} {
+		if strings.Contains(out, noise) {
+			t.Errorf("git chatter %q leaked into sync output:\n%s", noise, out)
+		}
+	}
+}
+
+// With trunk unchanged and every branch current, sync says exactly that.
+func TestSync_NothingToDo_SaysSo(t *testing.T) {
+	c, _ := setupGetTestEnv(t)
+	c.Quiet = false
+	if err := Create(c, CreateOpts{Name: "feature"}); err != nil {
+		t.Fatalf("create feature: %v", err)
+	}
+	commitFile(t, c, "feature.txt", "work", "feat: work")
+	syncTip(t, c, "feature")
+
+	out := captureStdout(t, func() {
+		if err := Sync(c, SyncOpts{Restack: true}); err != nil {
+			t.Fatalf("Sync: %v", err)
+		}
+	})
+	for _, want := range []string{"main is up to date", "Nothing to restack: 1 branch already up to date"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q, got:\n%s", want, out)
+		}
 	}
 }

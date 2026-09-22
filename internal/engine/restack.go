@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/internal/store"
@@ -265,12 +266,13 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 				return fmt.Errorf("cannot restack %s: %s", name, reason)
 			}
 
-			if err := runner.RebaseOnto(b.ParentBranchName, base.SHA, name); err != nil {
+			if _, err := runner.RebaseOntoCaptured(b.ParentBranchName, base.SHA, name); err != nil {
 				// A conflict in another worktree can't be resumed via
 				// `sr continue` (rebase state lives in the shared git dir but
 				// the rebase is in that worktree), so abort to leave it clean.
+				files := runner.ConflictedFiles()
 				_ = runner.RebaseAbort()
-				reason := fmt.Sprintf("conflict — restack manually in worktree %s", wtPath)
+				reason := fmt.Sprintf("%s — restack manually in worktree %s", conflictReason(files), wtPath)
 				if skipBlocked {
 					blocked[name] = true
 					skipped = append(skipped, skippedBranch{name, reason})
@@ -281,7 +283,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 			}
 		} else {
 			// Rebase: --onto <new parent tip> <old parent rev> <branch>
-			if err := c.Git.RebaseOnto(b.ParentBranchName, base.SHA, name); err != nil {
+			if out, err := c.Git.RebaseOntoCaptured(b.ParentBranchName, base.SHA, name); err != nil {
 				// A rebase can fail two ways: it PAUSED on a merge conflict (a
 				// rebase is now in progress and `sr continue` can resume it), or
 				// it never started at all (a precondition fatal). Only the
@@ -292,10 +294,23 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 				}
 				// Genuine merge conflict in the current worktree.
 				if skipBlocked {
+					// The rebase is about to be aborted, so git's resolution
+					// hints would mislead; the conflicted paths in the summary
+					// are what the user can act on.
+					files := c.Git.ConflictedFiles()
 					_ = c.Git.RebaseAbort()
 					blocked[name] = true
-					skipped = append(skipped, skippedBranch{name, "merge conflict"})
+					skipped = append(skipped, skippedBranch{name, conflictReason(files)})
 					continue
+				}
+				// The rebase stays paused for `sr continue`. Show which files
+				// conflict, but not git's hints — they prescribe `git rebase
+				// --continue`, which would finish the rebase behind stackr's
+				// back and desync the graph.
+				if !c.Quiet {
+					for _, line := range conflictLines(out) {
+						fmt.Println(line)
+					}
 				}
 				// Persist what already succeeded before bailing out. Branches
 				// earlier in the loop have genuinely moved, and dropping their
@@ -394,6 +409,29 @@ func plural(n int, one, many string) string {
 		return fmt.Sprintf("%d %s", n, one)
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// conflictReason words a merge conflict for the restack summary, naming the
+// files when git reported them.
+func conflictReason(files []string) string {
+	if len(files) == 0 {
+		return "merge conflict"
+	}
+	return "merge conflict in " + strings.Join(files, ", ")
+}
+
+// conflictLines keeps the lines of a failed rebase's output that tell the user
+// what conflicted — git's "CONFLICT (...)" reports and the commit it could not
+// apply — and drops the auto-merge chatter and the `git rebase --continue`
+// hints, which stackr's own guidance supersedes.
+func conflictLines(out string) []string {
+	var keep []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "CONFLICT") || strings.HasPrefix(line, "error: could not apply") {
+			keep = append(keep, line)
+		}
+	}
+	return keep
 }
 
 func anyFrozen(skipped []skippedBranch) bool {

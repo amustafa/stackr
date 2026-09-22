@@ -42,6 +42,7 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	TryPullMeta(c)
 
 	// Bring trunk up to date, without claiming it in this worktree.
+	oldTrunkRev, _ := c.Git.RevParse(trunk)
 	if err := fastForwardTrunk(c, cfg.Remote, trunk); err != nil {
 		return err
 	}
@@ -53,12 +54,20 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	}
 	g.Branches[trunk].BranchRevision = trunkRev
 
+	// Say what the fetch changed in the user's terms — how far trunk moved —
+	// rather than letting git narrate ref updates and a fast-forward diffstat.
+	if !c.Quiet {
+		fmt.Println(trunkDeltaLine(c, trunk, oldTrunkRev, trunkRev))
+	}
+
 	// Clean up merged branches, asking the operator first when there is one
-	// to ask; --clean deletes without prompting.
+	// to ask; --clean deletes without prompting. Each deletion is reported
+	// with the evidence that justified it, so a branch that disappears on the
+	// unprompted path never does so unexplained.
 	cleaned := cleanMergedBranches(c, g, trunk, c.Interactive && !opts.Clean)
-	for _, name := range cleaned {
+	for _, cb := range cleaned {
 		if !c.Quiet {
-			fmt.Printf("Cleaned up branch: %s\n", name)
+			fmt.Printf("Deleted %s (%s)\n", cb.Name, cb.Reason)
 		}
 	}
 
@@ -66,11 +75,9 @@ func Sync(c *context.Context, opts SyncOpts) error {
 		return err
 	}
 
-	// Restack all stacks.
+	// Restack all stacks. Restack narrates each move and closes with a
+	// summary of its own, so no header is needed here.
 	if opts.Restack || opts.All {
-		if !c.Quiet {
-			fmt.Println("Restacking...")
-		}
 		if err := Restack(c, RestackOpts{Branch: trunk, SkipBlocked: true}); err != nil {
 			return err
 		}
@@ -82,7 +89,7 @@ func Sync(c *context.Context, opts SyncOpts) error {
 			// Sync no longer parks this worktree on trunk, so usually we never
 			// left. Only check out when something downstream (restack) moved us.
 			if cur, cerr := c.Git.CurrentBranch(); cerr != nil || cur != origBranch {
-				_ = c.Git.Checkout(origBranch)
+				_ = c.Git.CheckoutQuiet(origBranch)
 			}
 		} else if !c.Quiet {
 			// origBranch was cleaned up as merged, so cleanMergedBranches
@@ -104,6 +111,18 @@ func Sync(c *context.Context, opts SyncOpts) error {
 	return nil
 }
 
+// trunkDeltaLine reports how far trunk advanced during this sync.
+func trunkDeltaLine(c *context.Context, trunk, oldRev, newRev string) string {
+	if oldRev == "" || oldRev == newRev {
+		return fmt.Sprintf("%s is up to date", trunk)
+	}
+	n, err := c.Git.CountCommits(oldRev, newRev)
+	if err != nil {
+		return fmt.Sprintf("%s updated", trunk)
+	}
+	return fmt.Sprintf("%s: %s", trunk, plural(n, "new commit", "new commits"))
+}
+
 // fastForwardTrunk brings the local trunk ref up to date with the remote.
 //
 // Where trunk is checked out decides how. Checking it out unconditionally — what
@@ -118,7 +137,7 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 	// Trunk is checked out right here: an ff-only merge moves the ref and this
 	// working tree together.
 	if cur, err := c.Git.CurrentBranch(); err == nil && cur == trunk {
-		if err := c.Git.RunGit("merge", "--ff-only", remoteTrunk); err != nil {
+		if err := c.Git.RunGit("merge", "--quiet", "--ff-only", remoteTrunk); err != nil {
 			return fmt.Errorf("could not fast-forward %s: %w", trunk, err)
 		}
 		return nil
@@ -136,7 +155,7 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 	if wtPath, werr := c.Git.WorktreeForBranch(trunk); werr == nil && wtPath != "" && !sameWorktree(wtPath, c.Git.Dir) {
 		runner := *c.Git
 		runner.Dir = wtPath
-		if err := runner.RunGit("merge", "--ff-only", remoteTrunk); err != nil {
+		if err := runner.RunGit("merge", "--quiet", "--ff-only", remoteTrunk); err != nil {
 			return fmt.Errorf("could not fast-forward %s in worktree %s: %w", trunk, wtPath, err)
 		}
 		return nil
@@ -146,7 +165,7 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 	// at all. Fetching from "." reuses the remote-tracking ref updated by the
 	// fetch above and keeps fast-forward-only semantics — a diverged trunk still
 	// errors rather than being silently reset.
-	if err := c.Git.RunGit("fetch", ".", remoteTrunk+":"+trunk); err != nil {
+	if err := c.Git.RunGit("fetch", "--quiet", ".", remoteTrunk+":"+trunk); err != nil {
 		return fmt.Errorf("could not fast-forward %s: %w", trunk, err)
 	}
 	return nil
@@ -169,7 +188,7 @@ func fastForwardTrunk(c *context.Context, remote, trunk string) error {
 // unlocks a second candidate class: branches whose PR was closed WITHOUT
 // merging. Those hold commits that exist on no other ref, so they are only
 // ever deleted with explicit consent — never on the unprompted path.
-func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confirm bool) []string {
+func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confirm bool) []cleanedBranch {
 	// One batched query instead of one `gh pr view` per branch. Best-effort:
 	// offline, or without gh, we fall through to the local patch-id test.
 	mergedPRs, forgeAnswered := ghMergedHeadBranches(c.Git.Dir)
@@ -188,7 +207,7 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confi
 	}
 	sort.Strings(names)
 
-	var cleaned []string
+	var cleaned []cleanedBranch
 	for _, name := range names {
 		b := g.Branches[name]
 		if b == nil {
@@ -258,7 +277,7 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confi
 			}
 		}
 
-		if err := c.Git.DeleteBranch(name, true); err != nil {
+		if err := c.Git.DeleteBranchQuiet(name); err != nil {
 			if !c.Quiet {
 				fmt.Printf("Note: %s is merged but could not be deleted (%v); leaving it tracked\n", name, err)
 			}
@@ -276,9 +295,15 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confi
 		// A recreated branch of the same name must start with no claim on the
 		// remote (ADR-0014).
 		_ = c.Store.DeletePushRecordsForBranch(name)
-		cleaned = append(cleaned, name)
+		cleaned = append(cleaned, cleanedBranch{Name: name, Reason: reason})
 	}
 	return cleaned
+}
+
+// cleanedBranch is a branch sync deleted, with the evidence that justified it.
+type cleanedBranch struct {
+	Name   string
+	Reason string
 }
 
 // branchHasLanded reports whether a branch's work is already present on trunk,

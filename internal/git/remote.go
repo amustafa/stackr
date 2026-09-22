@@ -137,9 +137,11 @@ func (r *Runner) Fetch(remote string) error {
 	return r.RunGit("fetch", remote)
 }
 
-// FetchPrune fetches and prunes deleted remote branches.
+// FetchPrune fetches and prunes deleted remote branches. Quiet: the
+// per-ref "abc..def main -> origin/main" and "[deleted]" lines are git's
+// bookkeeping; callers report what changed in terms the user cares about.
 func (r *Runner) FetchPrune(remote string) error {
-	return r.RunGit("fetch", "--prune", remote)
+	return r.RunGit("fetch", "--quiet", "--prune", remote)
 }
 
 // RemoteHasRef asks the remote itself (via ls-remote) whether ref exists.
