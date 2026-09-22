@@ -172,6 +172,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 	blocked := map[string]bool{} // branch -> its lineage cannot be restacked
 	var restacked []string
 	var skipped []skippedBranch
+	current := 0 // already stacked on their parent's tip; nothing to do
 
 	for i, name := range branches {
 		b := g.Branches[name]
@@ -216,6 +217,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 			if newRev, rerr := c.Git.RevParse(name); rerr == nil {
 				b.BranchRevision = newRev
 			}
+			current++
 			continue
 		}
 
@@ -334,20 +336,64 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 
 	// Return to original branch.
 	if origBranch != "" {
-		_ = c.Git.Checkout(origBranch)
+		_ = c.Git.CheckoutQuiet(origBranch)
 	}
 
-	// Frozen branches are reported whether or not skipBlocked is set: an
-	// operation that quietly treats one branch differently from its neighbours
-	// is indistinguishable from a bug (ADR-0015).
-	if !c.Quiet && len(skipped) > 0 && (skipBlocked || anyFrozen(skipped)) {
-		fmt.Printf("\nRestacked %d branch(es); left %d unrestacked:\n", len(restacked), len(skipped))
+	if !c.Quiet {
+		printRestackSummary(restacked, current, skipped, skipBlocked)
+	}
+	return nil
+}
+
+// printRestackSummary closes the restack with an accounting of every branch
+// the operation covered but did not print a "Restacking" line for. Only the
+// rebased branches announce themselves in the loop above; a branch found
+// already sitting on its parent's tip is skipped in silence, and in a long
+// stack that silence is indistinguishable from the restack having stopped
+// short — five branches vanish from the output and the user reads it as a
+// partial restack. So the count of already-current branches is always stated
+// whenever there were any.
+//
+// Frozen branches are reported whether or not skipBlocked is set: an
+// operation that quietly treats one branch differently from its neighbours
+// is indistinguishable from a bug (ADR-0015). Other skips are only reported
+// under skipBlocked, because without it the first one halted the operation
+// with an error that already said so.
+func printRestackSummary(restacked []string, current int, skipped []skippedBranch, skipBlocked bool) {
+	reportSkipped := len(skipped) > 0 && (skipBlocked || anyFrozen(skipped))
+	if current == 0 && !reportSkipped {
+		return
+	}
+
+	var line string
+	switch {
+	case len(restacked) == 0 && !reportSkipped:
+		line = fmt.Sprintf("Nothing to restack: %s already up to date", plural(current, "branch", "branches"))
+	case len(restacked) == 0:
+		line = fmt.Sprintf("Nothing restacked; %s already up to date", plural(current, "branch", "branches"))
+	default:
+		line = fmt.Sprintf("Restacked %s", plural(len(restacked), "branch", "branches"))
+		if current > 0 {
+			line += fmt.Sprintf("; %d already up to date", current)
+		}
+	}
+	if reportSkipped {
+		line += fmt.Sprintf("; left %d unrestacked:", len(skipped))
+	}
+	fmt.Println(line)
+	if reportSkipped {
 		for _, s := range skipped {
 			fmt.Printf("  - %s (%s)\n", s.name, s.reason)
 		}
 	}
+}
 
-	return nil
+// plural renders a count with the right noun form: "1 branch", "3 branches".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, one)
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 func anyFrozen(skipped []skippedBranch) bool {
