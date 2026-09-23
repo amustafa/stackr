@@ -1,0 +1,26 @@
+internal/git/plumbing_test.go
+  s_fe7988c305d2e0::t_d037459325dd8b 4
+  s_fe7988c305d2e0::t_9a6eb026880b7d 236-281
+internal/git/plumbing.go
+  s_fe7988c305d2e0::t_3726e9ad2d17db 162-166,168-172
+internal/git/remote.go
+  s_fe7988c305d2e0::t_3726e9ad2d17db 55-60,64,141-143,145
+internal/engine/submit.go
+  s_fe7988c305d2e0::t_3726e9ad2d17db 230-232,235,237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3ff2e5632d34fbce37afd48345e6dad0651ece81",
+  "prompts": {},
+  "sessions": {
+    "s_fe7988c305d2e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2228f3b7-a132-4947-82dd-b70120058d82",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
