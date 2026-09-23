@@ -13,7 +13,13 @@
       "parentBranchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
       "branchRevision": "3ff2e5632d34fbce37afd48345e6dad0651ece81",
       "children": [],
-      "description": "sr submit output is a report of what was pushed and which PRs exist, without git's push/fetch transcript; metadata push honors --no-verify"
+      "description": "sr submit output is a report of what was pushed and which PRs exist, without git's push/fetch transcript; metadata push honors --no-verify",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Quiet fetch and push at the wrapper level; --quiet leaves lease rejections and remote hook messages intact, verified by probing git directly"
+        }
+      ]
     }
   }
 }
