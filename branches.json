@@ -3,8 +3,17 @@
   "branches": {
     "main": {
       "branchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
-      "children": [],
+      "children": [
+        "submit-readable-output"
+      ],
       "isTrunk": true
+    },
+    "submit-readable-output": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
+      "branchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
+      "children": [],
+      "description": "sr submit output is a report of what was pushed and which PRs exist, without git's push/fetch transcript; metadata push honors --no-verify"
     }
   }
 }
