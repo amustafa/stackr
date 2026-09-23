@@ -2,28 +2,9 @@
   "version": 1,
   "branches": {
     "main": {
-      "branchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
-      "children": [
-        "submit-readable-output"
-      ],
-      "isTrunk": true
-    },
-    "submit-readable-output": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "044d27feae152ebde4fdb22c9bb33b122e4ae291",
-      "branchRevision": "3ff2e5632d34fbce37afd48345e6dad0651ece81",
+      "branchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
       "children": [],
-      "description": "sr submit output is a report of what was pushed and which PRs exist, without git's push/fetch transcript; metadata push honors --no-verify",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Quiet fetch and push at the wrapper level; --quiet leaves lease rejections and remote hook messages intact, verified by probing git directly"
-        },
-        {
-          "key": "risk",
-          "text": "Local pre-push hook output is the user's and still prints once per pushed branch; not suppressed. Unconditional --no-verify on the metadata push was considered and rejected — a pre-push hook may be policy, so only the user's explicit flag skips it"
-        }
-      ]
+      "isTrunk": true
     }
   }
 }
