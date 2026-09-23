@@ -227,11 +227,14 @@ func pushPhase(c *context.Context, cfg *store.Config, ready []Classification) ([
 			continue
 		}
 
+		// The branch keeps its name on the remote, and the remote was named
+		// by the fetch line above, so "-> origin/<same name>" adds only
+		// length.
 		if !c.Quiet {
 			if class.Disposition == DispPushForce {
-				fmt.Printf("Force pushing %s -> %s/%s\n", class.Branch, cfg.Remote, class.Branch)
+				fmt.Printf("Force pushing %s\n", class.Branch)
 			} else {
-				fmt.Printf("Pushing %s -> %s/%s\n", class.Branch, cfg.Remote, class.Branch)
+				fmt.Printf("Pushing %s\n", class.Branch)
 			}
 		}
 
