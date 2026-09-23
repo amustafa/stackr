@@ -1,6 +1,7 @@
 package git
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -230,5 +231,51 @@ func TestFetchRefBetweenRepos(t *testing.T) {
 	got, _ := clone.ReadRef("refs/stackr/data")
 	if got != commit {
 		t.Fatalf("fetched ref mismatch: got %s, want %s", got, commit)
+	}
+}
+
+// The metadata ref is pushed by every submit and sync. A `--no-verify` run
+// must not have its pre-push hook fire once more for that push — the hook
+// would be checking a ref that holds no code, and on a repo with tree-wide
+// pre-push checks that is a screenful of output for nothing.
+func TestPushRef_HonoursNoVerify(t *testing.T) {
+	remoteDir := t.TempDir()
+	remote := &Runner{Dir: remoteDir}
+	remote.RunGitCapture("init", "--bare")
+
+	local := tempRunner(t)
+	local.RunGitCapture("remote", "add", "origin", remoteDir)
+
+	// A pre-push hook that refuses every push. If it runs, the push fails.
+	hooksDir, err := local.RunGitCapture("rev-parse", "--git-path", "hooks")
+	if err != nil {
+		t.Fatalf("hooks dir: %v", err)
+	}
+	if !filepath.IsAbs(hooksDir) {
+		hooksDir = filepath.Join(local.Dir, hooksDir)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+	hook := filepath.Join(hooksDir, "pre-push")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+
+	sha, _ := local.HashObject([]byte("shared data"))
+	tree, _ := local.MakeTree([]TreeEntry{{Mode: "100644", Type: "blob", SHA: sha, Name: "data.json"}})
+	commit, _ := local.CommitTree(tree, nil, "share")
+	local.UpdateRef("refs/stackr/data", commit, "")
+
+	if err := local.PushRef("origin", "refs/stackr/data:refs/stackr/data"); err == nil {
+		t.Fatal("hook should have rejected the push when NoVerify is unset")
+	}
+
+	local.NoVerify = true
+	if err := local.PushRef("origin", "refs/stackr/data:refs/stackr/data"); err != nil {
+		t.Fatalf("PushRef with NoVerify should skip the hook, got: %v", err)
+	}
+	if got, _ := remote.ReadRef("refs/stackr/data"); got != commit {
+		t.Fatalf("remote ref = %q, want %q", got, commit)
 	}
 }

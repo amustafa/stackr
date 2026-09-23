@@ -52,10 +52,16 @@ func asStaleLease(err error, target **StaleLeaseError) bool {
 //
 // An empty expectSHA asserts the remote ref does not exist yet, which is the
 // correct lease for a first push and also closes the create race.
+//
+// The push runs quiet: the caller has already said which branch is going where,
+// and git's "To <remote>", "+ old...new (forced update)" and "set up to track"
+// lines would only repeat it. A rejection is unaffected — git still reports
+// "! [rejected] ... (stale info)" on stderr, which is what the lease check
+// below reads — and so is anything the remote's hooks say.
 func (r *Runner) PushPinned(remote, branch, expectSHA string, setUpstream bool) error {
 	lease := "--force-with-lease=refs/heads/" + branch + ":" + expectSHA
 
-	args := []string{"push"}
+	args := []string{"push", "--quiet"}
 	if setUpstream {
 		args = append(args, "-u")
 	}
@@ -132,9 +138,11 @@ func (r *Runner) PushWithUpstream(remote, branch string, force bool) error {
 	return r.RunGit(args...)
 }
 
-// Fetch fetches from the remote.
+// Fetch fetches from the remote. Quiet: callers announce the fetch in their
+// own words, and the per-ref "old..new branch -> origin/branch" lines — one for
+// every colleague's branch that moved — are git's bookkeeping, not news.
 func (r *Runner) Fetch(remote string) error {
-	return r.RunGit("fetch", remote)
+	return r.RunGit("fetch", "--quiet", remote)
 }
 
 // FetchPrune fetches and prunes deleted remote branches. Quiet: the

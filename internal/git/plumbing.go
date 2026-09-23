@@ -159,7 +159,15 @@ func (r *Runner) FetchRef(remote, refspec string) error {
 	return err
 }
 
-// PushRef pushes a specific refspec to a remote.
+// PushRef pushes a specific refspec to a remote. It is how stackr's own
+// metadata ref travels, so it runs quiet — the object-counting progress and
+// "refs/stackr/data -> refs/stackr/data" mean nothing to the user — and it
+// honours NoVerify like every other push: a `--no-verify` submit must not
+// have its pre-push hook run once more, against a ref that holds no code.
 func (r *Runner) PushRef(remote, refspec string) error {
-	return r.RunGit("push", remote, refspec)
+	args := []string{"push", "--quiet"}
+	if r.NoVerify {
+		args = append(args, "--no-verify")
+	}
+	return r.RunGit(append(args, remote, refspec)...)
 }
