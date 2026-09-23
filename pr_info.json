@@ -254,6 +254,13 @@
       "baseBranch": "gh-stacks-display",
       "stackNumber": 28
     },
+    "submit-readable-output": {
+      "number": 57,
+      "title": "feat(submit): report what was pushed, not git's transcript; metadata push honours --no-verify",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/57",
+      "baseBranch": "main"
+    },
     "sync-readable-output": {
       "number": 55,
       "title": "feat(sync): make the output a report, not a git transcript",
