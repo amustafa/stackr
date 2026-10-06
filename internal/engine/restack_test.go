@@ -2,6 +2,7 @@ package engine
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -433,5 +434,136 @@ func TestRestack_SummaryCountsSkippedAndCurrent(t *testing.T) {
 	}
 	if !strings.Contains(out, "- b (frozen)") {
 		t.Errorf("expected frozen b listed, got:\n%s", out)
+	}
+}
+
+// squashMergedParentWithRebuiltChild scripts the way a stack parent lands on
+// a forge: trunk T0 → parent with one commit P1 → child with one commit C1.
+// P1 is squash-merged as T1; the forge rebuilds the child's branch onto T1
+// (`git rebase --onto T1 P1 child`, identical patch); trunk then advances to
+// T3 in a single fast-forward, so trunk's reflog never visits T1 and
+// `merge-base --fork-point` has nothing to see through. The working tree is
+// left on trunk and the graph still records the child under the parent.
+type rebuiltChildScenario struct {
+	c      *context.Context
+	trunk  string
+	p1     string // parent's tip, the child's recorded base
+	t1     string // the squash of P1 on trunk — the child's true base after the rebuild
+	t3     string // trunk's tip
+	before string // combined patch-id of the child's own work before anything runs
+}
+
+func squashMergedParentWithRebuiltChild(t *testing.T) rebuiltChildScenario {
+	t.Helper()
+	c, trunk := newBaseRepo(t)
+	t0, _ := c.Git.RevParse(trunk)
+
+	if err := Create(c, CreateOpts{Name: "parent"}); err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	commitFile(t, c, "p.txt", "parent work", "parent: P1")
+	syncTip(t, c, "parent")
+	p1, _ := c.Git.RevParse("parent")
+
+	if err := Create(c, CreateOpts{Name: "child"}); err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	commitFile(t, c, "c.txt", "child work", "child: C1")
+	syncTip(t, c, "child")
+
+	// Squash-merge P1 and keep landing other work, all off a scratch line so
+	// trunk can take it in one fast-forward — the shape of `merge --ff-only
+	// origin/<trunk>` after a few PRs merged while the developer was away.
+	if _, err := c.Git.RunGitCapture("checkout", "-b", "scratch", t0); err != nil {
+		t.Fatalf("checkout scratch: %v", err)
+	}
+	commitFile(t, c, "p.txt", "parent work", "parent: P1 (#1)")
+	t1, _ := c.Git.RevParse("scratch")
+	commitFile(t, c, "t2.txt", "t2", "trunk: T2")
+	commitFile(t, c, "t3.txt", "t3", "trunk: T3")
+	t3, _ := c.Git.RevParse("scratch")
+
+	// The forge rebuilds the child onto the squash commit.
+	if _, err := c.Git.RunGitCapture("rebase", "--onto", t1, p1, "child"); err != nil {
+		t.Fatalf("rebuild child onto squash: %v", err)
+	}
+	before := patchID(t, c, t1, "child")
+
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	if _, err := c.Git.RunGitCapture("merge", "--ff-only", "scratch"); err != nil {
+		t.Fatalf("fast-forward trunk: %v", err)
+	}
+	c.Git.RunGitCapture("branch", "-D", "scratch")
+
+	if got, _ := c.Git.RevParse(trunk); got != t3 {
+		t.Fatalf("trunk should sit at T3 %s, got %s", abbrev(t3), abbrev(got))
+	}
+	if ok, _ := c.Git.IsAncestor(p1, "child"); ok {
+		t.Fatal("test setup is wrong: the rebuilt child must no longer contain P1")
+	}
+	if fp := c.Git.ForkPoint(trunk, "child"); fp != "" {
+		t.Fatalf("test setup is wrong: trunk's reflog must not see the child's base, but fork-point found %s", abbrev(fp))
+	}
+	return rebuiltChildScenario{c: c, trunk: trunk, p1: p1, t1: t1, t3: t3, before: before}
+}
+
+// patchID returns the stable patch-id of the combined diff base..branch —
+// the identity of a branch's own work, independent of where it sits.
+func patchID(t *testing.T, c *context.Context, base, branch string) string {
+	t.Helper()
+	diff, err := c.Git.RunGitCapture("diff", base, branch)
+	if err != nil {
+		t.Fatalf("diff %s %s: %v", abbrev(base), branch, err)
+	}
+	cmd := exec.Command("git", "patch-id", "--stable")
+	cmd.Dir = c.Git.Dir
+	cmd.Stdin = strings.NewReader(diff)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("patch-id: %v", err)
+	}
+	return strings.Fields(string(out))[0]
+}
+
+// After a stack parent squash-merges and the forge rebuilds the child onto the
+// squash commit, sync's cleanup reparents the child onto trunk. Restack must
+// then succeed on its own: the child's base is recoverable as the merge-base
+// with trunk, and refusing it leaves the user hand-computing a sha that git
+// already knows.
+func TestRestack_ParentSquashMergedAndChildRebuilt_RestacksWithoutBase(t *testing.T) {
+	s := squashMergedParentWithRebuiltChild(t)
+	c := s.c
+
+	g, _ := c.Store.ReadGraph()
+	cleaned := cleanMergedBranches(c, g, s.trunk, false)
+	if len(cleaned) != 1 || cleaned[0].Name != "parent" {
+		t.Fatalf("expected cleanup to delete [parent], got %v", cleaned)
+	}
+	if err := c.Store.WriteGraph(g); err != nil {
+		t.Fatalf("write graph: %v", err)
+	}
+
+	if err := Restack(c, RestackOpts{Branch: "child"}); err != nil {
+		t.Fatalf("restack stopped although the child's base is the merge-base with trunk: %v", err)
+	}
+
+	if ok, _ := c.Git.IsAncestor(s.t3, "child"); !ok {
+		t.Error("child was not rebuilt onto trunk's tip")
+	}
+	count, _ := c.Git.RunGitCapture("rev-list", "--count", s.trunk+"..child")
+	if count != "1" {
+		t.Errorf("child should own exactly its one commit on top of trunk, got %s (P1 duplicated or C1 dropped)", count)
+	}
+	if after := patchID(t, c, s.trunk, "child"); after != s.before {
+		t.Errorf("child's work changed across the restack: patch-id %s → %s", s.before, after)
+	}
+
+	g, _ = c.Store.ReadGraph()
+	cb := g.Branches["child"]
+	if cb.ParentBranchName != s.trunk || cb.ParentBranchRevision != s.t3 {
+		t.Errorf("graph record after restack: parent=%s base=%s, want parent=%s base=%s",
+			cb.ParentBranchName, abbrev(cb.ParentBranchRevision), s.trunk, abbrev(s.t3))
 	}
 }
