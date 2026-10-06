@@ -1,9 +1,18 @@
 {
   "version": 1,
   "branches": {
-    "main": {
+    "fix/stale-base-after-parent-merge": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
       "branchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
       "children": [],
+      "description": "Recover a child's recorded base after its parent squash-merges and the forge rebuilds the child onto trunk"
+    },
+    "main": {
+      "branchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
+      "children": [
+        "fix/stale-base-after-parent-merge"
+      ],
       "isTrunk": true
     }
   }
