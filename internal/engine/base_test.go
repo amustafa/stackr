@@ -354,7 +354,7 @@ func TestBranchHasLanded_MultiCommitSquashMergedBranch_IsDetected(t *testing.T) 
 	}
 
 	g, _ := c.Store.ReadGraph()
-	base, err := resolveBase(c, "feature", g.Branches["feature"])
+	base, err := resolveBase(c, "feature", g.Branches["feature"], true)
 	if err != nil {
 		t.Fatalf("resolveBase: %v", err)
 	}
@@ -402,8 +402,20 @@ func TestBranchHasLanded_EmptyBranch_IsNotDetected(t *testing.T) {
 // resolveBase must refuse to guess when the recorded base is unusable and the
 // reflog cannot recover it. Returning a plausible-but-wrong base is worse than
 // failing: it silently duplicates or drops commits.
+//
+// The parent here is an ordinary branch, not trunk. An ordinary parent can be
+// amended, which pushes the plain merge-base back past the rewrite — so for it
+// the merge-base is exactly the guess resolveBase must not make on its own.
+// It may only be offered to the user, with that caveat attached.
 func TestResolveBase_Unrecoverable_FailsLoudly(t *testing.T) {
 	c, _ := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "p"}); err != nil {
+		t.Fatalf("create p: %v", err)
+	}
+	commitFile(t, c, "p.txt", "from p", "p: first")
+	syncTip(t, c, "p")
+	p1, _ := c.Git.RevParse("p")
 
 	if err := Create(c, CreateOpts{Name: "a"}); err != nil {
 		t.Fatalf("create a: %v", err)
@@ -418,7 +430,7 @@ func TestResolveBase_Unrecoverable_FailsLoudly(t *testing.T) {
 	// Destroy the reflog so fork-point recovery cannot succeed either.
 	c.Git.RunGitCapture("reflog", "expire", "--expire=now", "--all")
 
-	_, err := resolveBase(c, "a", g.Branches["a"])
+	_, err := resolveBase(c, "a", g.Branches["a"], false)
 	if err == nil {
 		t.Fatal("resolveBase invented a base instead of reporting it as unrecoverable")
 	}
@@ -426,8 +438,78 @@ func TestResolveBase_Unrecoverable_FailsLoudly(t *testing.T) {
 	if !asBaseUnresolved(err, &bue) {
 		t.Fatalf("wrong error type: %T (%v)", err, err)
 	}
-	if !strings.Contains(err.Error(), "--base") {
+	msg := err.Error()
+	if !strings.Contains(msg, "--base") {
 		t.Error("error should point the user at the --base escape hatch")
+	}
+	// The merge-base is the sha the user would otherwise compute by hand, so
+	// it is named — but only as a candidate to verify, never as the answer.
+	if bue.Suggested != p1 || !strings.Contains(msg, abbrev(p1)) {
+		t.Errorf("error should offer the merge-base %s as a candidate, got suggested=%q in:\n%s", abbrev(p1), abbrev(bue.Suggested), msg)
+	}
+	if !strings.Contains(msg, "rewritten") {
+		t.Errorf("error should warn that the candidate is wrong after a rewritten parent, got:\n%s", msg)
+	}
+	if strings.Contains(msg, "--base "+p1) {
+		t.Errorf("error must not present the merge-base as the answer for a non-trunk parent:\n%s", msg)
+	}
+}
+
+// Trunk is append-only, so for a trunk-parented branch the plain merge-base
+// is where the branch's own commits begin — and it is the only recovery left
+// once fork-point has nothing to see through. A local trunk advances in
+// fast-forward jumps (`merge --ff-only origin/<trunk>`), so its reflog
+// records landing points, never the commit a branch happens to sit on.
+func TestResolveBase_TrunkParent_ForkPointMissing_UsesMergeBase(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	t0, _ := c.Git.RevParse(trunk)
+
+	// Trunk grows T1..T3 off a scratch line and takes it in one jump.
+	if _, err := c.Git.RunGitCapture("checkout", "-b", "scratch", t0); err != nil {
+		t.Fatalf("checkout scratch: %v", err)
+	}
+	commitFile(t, c, "t1.txt", "t1", "trunk: T1")
+	t1, _ := c.Git.RevParse("scratch")
+	commitFile(t, c, "t2.txt", "t2", "trunk: T2")
+	commitFile(t, c, "t3.txt", "t3", "trunk: T3")
+
+	// The branch sits on T1, a commit trunk's reflog will never visit.
+	if _, err := c.Git.RunGitCapture("checkout", "-b", "a", t1); err != nil {
+		t.Fatalf("checkout a: %v", err)
+	}
+	commitFile(t, c, "a.txt", "from a", "a: first")
+	a1, _ := c.Git.RevParse("a")
+
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	if _, err := c.Git.RunGitCapture("merge", "--ff-only", "scratch"); err != nil {
+		t.Fatalf("fast-forward trunk: %v", err)
+	}
+	c.Git.RunGitCapture("branch", "-D", "scratch")
+
+	g, _ := c.Store.ReadGraph()
+	if err := g.AddBranch("a", trunk, "", a1); err != nil {
+		t.Fatalf("add branch: %v", err)
+	}
+	c.Store.WriteGraph(g)
+
+	if fp := c.Git.ForkPoint(trunk, "a"); fp != "" {
+		t.Fatalf("test setup is wrong: fork-point must have nothing to offer, got %s", abbrev(fp))
+	}
+
+	base, err := resolveBase(c, "a", g.Branches["a"], true)
+	if err != nil {
+		t.Fatalf("resolveBase refused a trunk-parented branch whose merge-base is unambiguous: %v", err)
+	}
+	if base.SHA != t1 {
+		t.Errorf("base = %s, want the merge-base with trunk %s", abbrev(base.SHA), abbrev(t1))
+	}
+	if !base.Recovered() || base.Source != baseMergeBase {
+		t.Errorf("recovery must be visible to the caller: Recovered=%v Source=%d", base.Recovered(), base.Source)
+	}
+	if note := base.recoveryNote("a", trunk); !strings.Contains(note, "merge-base") {
+		t.Errorf("recovery note should say how the base was found, got %q", note)
 	}
 }
 

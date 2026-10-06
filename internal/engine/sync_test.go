@@ -342,6 +342,104 @@ func stubConfirm(t *testing.T, answer bool) *[]string {
 	return &prompts
 }
 
+// When a parent squash-merges and the forge has already rebuilt the child
+// onto the squash commit, reparenting the child onto trunk must not hand it
+// the deleted parent's tip as a base: nothing reaches that commit any more,
+// it is not in the child's history, and the next restack would stop on it.
+// The base is the merge-base with trunk, and the recovery is said out loud.
+func TestCleanMergedBranches_ChildAlreadyOnTrunk_KeepsBaseValid(t *testing.T) {
+	s := squashMergedParentWithRebuiltChild(t)
+	c := s.c
+
+	g, _ := c.Store.ReadGraph()
+	c.Quiet = false
+	var cleaned []cleanedBranch
+	out := captureStdout(t, func() {
+		cleaned = cleanMergedBranches(c, g, s.trunk, false)
+	})
+	c.Quiet = true
+
+	if len(cleaned) != 1 || cleaned[0].Name != "parent" {
+		t.Fatalf("expected [parent] cleaned, got %v", cleaned)
+	}
+	cb := g.Branches["child"]
+	if cb.ParentBranchName != s.trunk {
+		t.Fatalf("child reparented onto %q, want trunk", cb.ParentBranchName)
+	}
+	if cb.ParentBranchRevision != s.t1 {
+		t.Errorf("child's recorded base = %s, want the squash commit %s (deleted tip was %s)",
+			abbrev(cb.ParentBranchRevision), abbrev(s.t1), abbrev(s.p1))
+	}
+	if ok, _ := c.Git.IsAncestor(cb.ParentBranchRevision, "child"); !ok {
+		t.Error("child's recorded base is not an ancestor of the child: the invariant is broken")
+	}
+	if !strings.Contains(out, "child") || !strings.Contains(out, "merge-base") {
+		t.Errorf("recovery should be reported, got:\n%s", out)
+	}
+
+	if err := c.Store.WriteGraph(g); err != nil {
+		t.Fatalf("write graph: %v", err)
+	}
+	if err := Restack(c, RestackOpts{Branch: "child"}); err != nil {
+		t.Fatalf("restack after cleanup: %v", err)
+	}
+	if count, _ := c.Git.RunGitCapture("rev-list", "--count", s.trunk+"..child"); count != "1" {
+		t.Errorf("child should own one commit on trunk, got %s", count)
+	}
+	if after := patchID(t, c, s.trunk, "child"); after != s.before {
+		t.Errorf("child's work changed: patch-id %s → %s", s.before, after)
+	}
+}
+
+// The ordinary case must be untouched: a child still built on the deleted
+// parent's tip keeps that tip as its base, silently, and its restack replays
+// only its own commit — the parent's landed work is excluded by the base.
+func TestCleanMergedBranches_ChildStillOnDeletedTip_KeepsDeletedTipAsBase(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+
+	if err := Create(c, CreateOpts{Name: "parent"}); err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	commitFile(t, c, "p.txt", "parent work", "parent: P1")
+	syncTip(t, c, "parent")
+	p1, _ := c.Git.RevParse("parent")
+
+	if err := Create(c, CreateOpts{Name: "child"}); err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	commitFile(t, c, "c.txt", "child work", "child: C1")
+	syncTip(t, c, "child")
+
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	commitFile(t, c, "p.txt", "parent work", "parent: P1 (#1)")
+
+	g, _ := c.Store.ReadGraph()
+	c.Quiet = false
+	out := captureStdout(t, func() {
+		cleanMergedBranches(c, g, trunk, false)
+	})
+	c.Quiet = true
+
+	cb := g.Branches["child"]
+	if cb.ParentBranchName != trunk || cb.ParentBranchRevision != p1 {
+		t.Fatalf("child record parent=%s base=%s, want parent=%s base=%s",
+			cb.ParentBranchName, abbrev(cb.ParentBranchRevision), trunk, abbrev(p1))
+	}
+	if strings.Contains(out, "Note:") {
+		t.Errorf("nothing was recovered, so nothing should be reported, got:\n%s", out)
+	}
+
+	c.Store.WriteGraph(g)
+	if err := Restack(c, RestackOpts{Branch: "child"}); err != nil {
+		t.Fatalf("restack: %v", err)
+	}
+	if count, _ := c.Git.RunGitCapture("rev-list", "--count", trunk+"..child"); count != "1" {
+		t.Errorf("child should own one commit on trunk, got %s (P1 replayed?)", count)
+	}
+}
+
 // Deleting a branch is the most destructive thing sync does, so with an
 // operator present it must be their call: a declined prompt leaves the branch
 // in git, in the graph, and out of the cleaned list.

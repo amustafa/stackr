@@ -682,9 +682,11 @@ range `(base, branch]` is what stackr replays when restacking, so the base is
 what keeps a rebase from picking up commits that belong to the parent.
 
 Stackr keeps bases alive behind `refs/stackr/bases` and repairs them
-automatically where it safely can, including recovering one from the parent's
-reflog. If a base is lost beyond recovery — usually after heavy raw-git surgery
-plus an expired reflog — stackr stops rather than guess, because guessing
+automatically where it safely can: recovering one from the parent's reflog,
+or — when the parent is trunk — taking the merge-base with trunk, which is
+safe there because trunk only ever grows. If a base is lost beyond recovery —
+usually after heavy raw-git surgery plus an expired reflog, on a branch whose
+parent is not trunk — stackr stops rather than guess, because guessing
 duplicates or drops commits:
 
 ```text
@@ -692,15 +694,43 @@ cannot determine which commits belong to feat-3: recorded base 0000000 is
 missing or is not an ancestor of the branch.
 ```
 
-Point it at the commit the branch was created from:
+The error names the merge-base as a candidate when git can compute one. For a
+parent that has never been amended it is the right answer; otherwise find the
+commit the branch was created from and point stackr at it:
 
 ```bash
-# See where the branch actually diverged
-git log --oneline <parent>..<branch>
+# Candidate: where git thinks the branch diverged from its parent
+git merge-base <parent> <branch>
+
+# Confirm the range above it holds only the branch's own commits
+git log --oneline <sha>..<branch>
 
 # Re-point the base and restack in one step
 sr restack --branch feat-3 --base <sha>
 ```
+
+#### After a stack parent merges
+
+When the parent of a stacked branch is squash-merged and the forge rebuilds
+the child onto the squash commit (GitHub does this for stacked PRs), `sr sync`
+deletes the parent and reparents the child onto trunk. Stackr now re-derives
+the child's base as its merge-base with trunk during that cleanup, and `sr get`
+does the same when it replaces a local tip with a rebuilt remote one. On a
+graph written before that fix, or if `sr restack` still reports the base as
+missing, the repair is the same merge-base, done by hand:
+
+```bash
+# Bring trunk up to date first, so the merge-base is against current trunk
+git fetch <remote>
+git -C <trunk checkout> merge --ff-only <remote>/<trunk>
+
+# Re-point the child at where its own commits begin on trunk, and restack
+sr restack --branch <child> --base "$(git merge-base <trunk> <child>)"
+```
+
+Afterwards `sr log` shows no `[needs restack]`, `git log --oneline <trunk>..<child>`
+lists only the child's own commits, and a second `sr restack` reports nothing to
+do. The remote branch is left as the forge rebuilt it until the next `sr submit`.
 
 ### Reorganizing a Stack
 

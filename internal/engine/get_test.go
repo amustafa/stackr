@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/amustafa/stackr/internal/context"
@@ -242,5 +243,168 @@ func TestComputeWalkPath_SingleBranch(t *testing.T) {
 	path := computeWalkPath(g, "feat-a")
 	if len(path) != 1 || path[0] != "feat-a" {
 		t.Errorf("walk path = %v, want [feat-a]", path)
+	}
+}
+
+// rebaseRemoteFeatureOntoNewTrunk plays the forge: from a throwaway clone it
+// lands commit M1 on main, rebases feature onto it (identical patch), and
+// force-pushes feature. With aheadAgain it then lands M2 on main as well, so
+// the remote branch sits on a trunk commit older than trunk's tip. Returns
+// the SHAs of M1, the rebuilt feature tip, and main's final tip.
+func rebaseRemoteFeatureOntoNewTrunk(t *testing.T, remoteDir string, aheadAgain bool) (m1, f1Rebuilt, mainTip string) {
+	t.Helper()
+	dir := t.TempDir()
+	r := &git.Runner{Dir: dir}
+	r.RunGitCapture("clone", remoteDir, ".")
+	r.RunGitCapture("config", "user.email", "test@test.com")
+	r.RunGitCapture("config", "user.name", "Test")
+
+	if err := r.RunGit("checkout", "main"); err != nil {
+		t.Fatalf("checkout main: %v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "m1.txt"), []byte("m1"), 0o644)
+	r.RunGitCapture("add", "m1.txt")
+	if err := r.RunGit("commit", "-m", "trunk: M1"); err != nil {
+		t.Fatalf("commit M1: %v", err)
+	}
+	m1, _ = r.RevParse("main")
+	if err := r.RunGit("push", "origin", "main"); err != nil {
+		t.Fatalf("push M1: %v", err)
+	}
+
+	if err := r.RunGit("checkout", "-b", "feature", "origin/feature"); err != nil {
+		t.Fatalf("checkout feature: %v", err)
+	}
+	if err := r.RunGit("rebase", "main"); err != nil {
+		t.Fatalf("rebase feature: %v", err)
+	}
+	f1Rebuilt, _ = r.RevParse("feature")
+	if err := r.RunGit("push", "--force", "origin", "feature"); err != nil {
+		t.Fatalf("force-push feature: %v", err)
+	}
+
+	mainTip = m1
+	if aheadAgain {
+		r.RunGit("checkout", "main")
+		os.WriteFile(filepath.Join(dir, "m2.txt"), []byte("m2"), 0o644)
+		r.RunGitCapture("add", "m2.txt")
+		if err := r.RunGit("commit", "-m", "trunk: M2"); err != nil {
+			t.Fatalf("commit M2: %v", err)
+		}
+		mainTip, _ = r.RevParse("main")
+		if err := r.RunGit("push", "origin", "main"); err != nil {
+			t.Fatalf("push M2: %v", err)
+		}
+	}
+	return m1, f1Rebuilt, mainTip
+}
+
+// localFeatureOffMain creates feature locally with one commit on main, pushes
+// it, and tracks it in the graph with main's tip as its base.
+func localFeatureOffMain(t *testing.T, c *context.Context) (m0, f1 string) {
+	t.Helper()
+	m0, _ = c.Git.RevParse("main")
+	if err := c.Git.RunGit("checkout", "-b", "feature", "main"); err != nil {
+		t.Fatalf("checkout feature: %v", err)
+	}
+	commitFile(t, c, "f.txt", "feature work", "feature: F1")
+	f1, _ = c.Git.RevParse("feature")
+	if err := c.Git.RunGit("push", "-u", "origin", "feature"); err != nil {
+		t.Fatalf("push feature: %v", err)
+	}
+	if err := c.Git.Checkout("main"); err != nil {
+		t.Fatalf("checkout main: %v", err)
+	}
+	g, _ := c.Store.ReadGraph()
+	if err := g.AddBranch("feature", "main", m0, f1); err != nil {
+		t.Fatalf("add branch: %v", err)
+	}
+	if err := c.Store.WriteGraph(g); err != nil {
+		t.Fatalf("write graph: %v", err)
+	}
+	return m0, f1
+}
+
+// Replacing a branch's tip with the remote's changes what the branch is built
+// on whenever the remote was rebased — the ordinary forge auto-rebase onto a
+// parent that moved. The recorded base must follow: with the parent's tip now
+// in the branch's history, that tip is the base, not the commit the branch
+// was first created from.
+func TestReplaceWithRemote_RemoteRebasedOntoParent_RederivesBase(t *testing.T) {
+	c, remoteDir := setupGetTestEnv(t)
+	m0, _ := localFeatureOffMain(t, c)
+	m1, f1Rebuilt, _ := rebaseRemoteFeatureOntoNewTrunk(t, remoteDir, false)
+
+	// Local trunk catches up, as get does before walking the stack.
+	if err := c.Git.RunGit("fetch", "origin"); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if err := c.Git.RunGit("merge", "--ff-only", "origin/main"); err != nil {
+		t.Fatalf("fast-forward main: %v", err)
+	}
+
+	g, _ := c.Store.ReadGraph()
+	if _, err := replaceWithRemote(c, g, "feature", "origin/feature"); err != nil {
+		t.Fatalf("replaceWithRemote: %v", err)
+	}
+
+	b := g.Branches["feature"]
+	if b.BranchRevision != f1Rebuilt {
+		t.Errorf("tip = %s, want the remote's %s", abbrev(b.BranchRevision), abbrev(f1Rebuilt))
+	}
+	if b.ParentBranchRevision != m1 {
+		t.Errorf("base = %s, want the parent's tip %s now that the branch is built on it (was %s)",
+			abbrev(b.ParentBranchRevision), abbrev(m1), abbrev(m0))
+	}
+}
+
+// When the parent's tip is NOT in the replaced branch's history — local trunk
+// has moved past the commit the remote branch was rebuilt on — and the old
+// pointer no longer holds either, a trunk parent still yields a base: the
+// merge-base with trunk. That is the record sync's cleanup used to leave
+// behind (a deleted parent's tip), repaired here by the next get.
+func TestReplaceWithRemote_StaleBaseWithTrunkParent_UsesMergeBase(t *testing.T) {
+	c, remoteDir := setupGetTestEnv(t)
+	localFeatureOffMain(t, c)
+	m1, f1Rebuilt, m2 := rebaseRemoteFeatureOntoNewTrunk(t, remoteDir, true)
+
+	if err := c.Git.RunGit("fetch", "origin"); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if err := c.Git.RunGit("merge", "--ff-only", "origin/main"); err != nil {
+		t.Fatalf("fast-forward main: %v", err)
+	}
+	if tip, _ := c.Git.RevParse("main"); tip != m2 {
+		t.Fatalf("local main should be at M2 %s, got %s", abbrev(m2), abbrev(tip))
+	}
+
+	// A base that exists as an object but is in nobody's history — the shape
+	// a deleted parent's tip takes once its branch is gone.
+	c.Git.RunGitCapture("checkout", "-b", "dangling", "main")
+	c.Git.RunGitCapture("commit", "--allow-empty", "-m", "dangling")
+	dangling, _ := c.Git.RevParse("dangling")
+	c.Git.Checkout("main")
+	c.Git.RunGitCapture("branch", "-D", "dangling")
+
+	g, _ := c.Store.ReadGraph()
+	g.Branches["feature"].ParentBranchRevision = dangling
+
+	c.Quiet = false
+	out := captureStdout(t, func() {
+		if _, err := replaceWithRemote(c, g, "feature", "origin/feature"); err != nil {
+			t.Fatalf("replaceWithRemote: %v", err)
+		}
+	})
+	c.Quiet = true
+
+	b := g.Branches["feature"]
+	if b.BranchRevision != f1Rebuilt {
+		t.Errorf("tip = %s, want the remote's %s", abbrev(b.BranchRevision), abbrev(f1Rebuilt))
+	}
+	if b.ParentBranchRevision != m1 {
+		t.Errorf("base = %s, want the merge-base with trunk %s", abbrev(b.ParentBranchRevision), abbrev(m1))
+	}
+	if !strings.Contains(out, "merge-base") {
+		t.Errorf("recovery should be reported, got:\n%s", out)
 	}
 }
