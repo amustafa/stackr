@@ -17,6 +17,10 @@
               "reference": "internal/engine/base.go"
             }
           ]
+        },
+        {
+          "key": "follow-up",
+          "text": "sr log could render [base lost] instead of [needs restack] when resolveBase fails; not adopted — after this fix the trunk-parent case no longer exists, and the remaining non-trunk case would cost a fork-point lookup per branch on every sr log."
         }
       ]
     },
