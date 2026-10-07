@@ -194,6 +194,13 @@
       "baseBranch": "main",
       "stackNumber": 27
     },
+    "fix/stale-base-after-parent-merge": {
+      "number": 58,
+      "title": "fix(base): recover a child's base after its parent squash-merges and the forge rebuilds it onto trunk",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/58",
+      "baseBranch": "main"
+    },
     "gh-stacks-api": {
       "number": 22,
       "title": "feat(submit): register stacks on GitHub after submit",
