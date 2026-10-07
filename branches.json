@@ -1,34 +1,9 @@
 {
   "version": 1,
   "branches": {
-    "fix/stale-base-after-parent-merge": {
-      "parentBranchName": "main",
-      "parentBranchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
-      "branchRevision": "86bd36b25b67308c64cc24073119922ecc593237",
-      "children": [],
-      "description": "Recover a child's recorded base after its parent squash-merges and the forge rebuilds the child onto trunk",
-      "context": [
-        {
-          "key": "approach",
-          "text": "Trunk-only merge-base tier: trunk is append-only, so merge-base(trunk, branch) is where a trunk-parented branch's own commits begin. Non-trunk parents still fail loudly (an amended parent pushes the merge-base past the rewrite). Sync cleanup and get's replace-with-remote both go through one reconcileBase helper so the two paths agree.",
-          "sources": [
-            {
-              "type": "file",
-              "reference": "internal/engine/base.go"
-            }
-          ]
-        },
-        {
-          "key": "follow-up",
-          "text": "sr log could render [base lost] instead of [needs restack] when resolveBase fails; not adopted — after this fix the trunk-parent case no longer exists, and the remaining non-trunk case would cost a fork-point lookup per branch on every sr log."
-        }
-      ]
-    },
     "main": {
       "branchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
-      "children": [
-        "fix/stale-base-after-parent-merge"
-      ],
+      "children": [],
       "isTrunk": true
     }
   }
