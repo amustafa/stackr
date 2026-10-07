@@ -4,7 +4,7 @@
     "fix/stale-base-after-parent-merge": {
       "parentBranchName": "main",
       "parentBranchRevision": "ee9fd9268d94603c2395d0dee5eb6a0fdcea5b8e",
-      "branchRevision": "2dd9ad8fdd101a6dc9c604ce8a3b49152b91f8ff",
+      "branchRevision": "86bd36b25b67308c64cc24073119922ecc593237",
       "children": [],
       "description": "Recover a child's recorded base after its parent squash-merges and the forge rebuilds the child onto trunk",
       "context": [
