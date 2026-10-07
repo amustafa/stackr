@@ -288,8 +288,29 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confi
 		// RemoveBranch reparents children onto the BranchRevision set above, and
 		// can only fail for a branch that is missing or trunk — neither reachable
 		// here, since trunk is filtered out of names.
+		//
+		// That tip is the right base only for a child still built on it. A
+		// forge that rebuilds the child onto the squash commit as the parent
+		// lands (GitHub's stacked-PR behaviour) leaves the child containing
+		// neither the deleted tip nor its old recorded base, so hand each
+		// child's base through reconcileBase rather than trusting RemoveBranch's
+		// pure-graph guess — otherwise the record points at a commit no live
+		// ref reaches and the next restack stops on it.
+		children := append([]string(nil), b.Children...)
+		oldBases := make(map[string]string, len(children))
+		for _, child := range children {
+			if cb := g.Branches[child]; cb != nil {
+				oldBases[child] = cb.ParentBranchRevision
+			}
+		}
 		if err := g.RemoveBranch(name); err != nil {
 			continue
+		}
+		for _, child := range children {
+			note := reconcileBase(c, g, child, "after "+name+" was deleted", b.BranchRevision, oldBases[child])
+			if note != "" && !c.Quiet {
+				fmt.Println(note)
+			}
 		}
 
 		// A recreated branch of the same name must start with no claim on the
@@ -310,7 +331,7 @@ type cleanedBranch struct {
 // by whichever merge strategy was used. The reason names the evidence, in
 // words fit for a deletion prompt; it is empty when the branch has not landed.
 func branchHasLanded(c *context.Context, name string, b *graph.BranchState, trunk string, mergedPRs map[string]int, forgeAnswered bool) (string, bool) {
-	base, baseErr := resolveBase(c, name, b)
+	base, baseErr := resolveBase(c, name, b, b.ParentBranchName == trunk)
 
 	// A branch with no commits of its own has not landed — it is simply empty.
 	// Ancestry alone would call it merged, because its tip IS its parent's tip,

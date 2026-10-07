@@ -376,7 +376,18 @@ func replaceWithRemote(c *context.Context, g *graph.Graph, branch, remoteRef str
 		}
 	}
 
-	if b := g.Branches[branch]; b != nil {
+	// Replacing the tip can change what the branch is built on — a forge
+	// auto-rebase onto the parent is exactly that — so the base has to be
+	// re-derived, not just the tip. Normally the parent's tip is now an
+	// ancestor and becomes the base; otherwise the old pointer stands if it
+	// still holds, and the merge-base with trunk is the last resort.
+	if b := g.Branches[branch]; b != nil && !b.IsTrunk {
+		parentTip, _ := c.Git.RevParse(b.ParentBranchName)
+		note := reconcileBase(c, g, branch, "after replacing it with the remote", parentTip, b.ParentBranchRevision)
+		if note != "" && !c.Quiet {
+			fmt.Println("  " + note)
+		}
+	} else if b != nil {
 		b.BranchRevision = remoteRev
 	}
 	if !c.Quiet {

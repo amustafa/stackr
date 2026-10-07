@@ -81,13 +81,12 @@ func squashCurrent(c *context.Context, g *graph.Graph, branch string, opts Squas
 	//
 	// The recorded base is an ancestor of HEAD by construction, so the squashed
 	// commit contains exactly this branch's own work and nothing else.
-	base, err := resolveBase(c, branch, b)
+	base, err := resolveBase(c, branch, b, g.IsTrunk(b.ParentBranchName))
 	if err != nil {
 		return err
 	}
 	if base.Recovered() && !c.Quiet {
-		fmt.Printf("Note: recorded base for %s was unusable; recovered %s from %s's reflog\n",
-			branch, abbrev(base.SHA), b.ParentBranchName)
+		fmt.Println(base.recoveryNote(branch, b.ParentBranchName))
 	}
 
 	if err := c.Git.RunGit("reset", "--soft", base.SHA); err != nil {
@@ -223,7 +222,7 @@ func squashStack(c *context.Context, opts SquashOpts) error {
 		// A branch already down to one commit has nothing to squash, and
 		// rewriting it anyway would clobber its commit message with the
 		// default. This is also what makes an interrupted sweep safe to rerun.
-		base, err := resolveBase(c, name, b)
+		base, err := resolveBase(c, name, b, g.IsTrunk(b.ParentBranchName))
 		if err != nil {
 			return err
 		}

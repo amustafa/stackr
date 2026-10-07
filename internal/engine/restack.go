@@ -225,7 +225,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 		// Determine which commits actually belong to this branch before moving
 		// anything. Getting this wrong is what replays a parent's superseded
 		// commits on top of its rewritten ones.
-		base, err := resolveBase(c, name, b)
+		base, err := resolveBase(c, name, b, g.IsTrunk(b.ParentBranchName))
 		if err != nil {
 			if skipBlocked {
 				blocked[name] = true
@@ -235,8 +235,7 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 			return err
 		}
 		if base.Recovered() && !c.Quiet {
-			fmt.Printf("Note: recorded base for %s was unusable; recovered %s from %s's reflog\n",
-				name, abbrev(base.SHA), b.ParentBranchName)
+			fmt.Println(base.recoveryNote(name, b.ParentBranchName))
 		}
 
 		if !c.Quiet {
