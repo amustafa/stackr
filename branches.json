@@ -6,7 +6,19 @@
       "parentBranchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
       "branchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
       "children": [],
-      "description": "sync and delete vacate the main checkout onto trunk instead of refusing when it holds the branch being removed"
+      "description": "sync and delete vacate the main checkout onto trunk instead of refusing when it holds the branch being removed",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Git's own checkout is the safety check: vacate the main checkout onto trunk and let uncommitted changes ride along; if git refuses because a change would be overwritten, leave the branch tracked. No separate dirty pre-check on this path.",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/delete.go"
+            }
+          ]
+        }
+      ]
     },
     "main": {
       "branchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
