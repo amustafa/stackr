@@ -1,0 +1,26 @@
+internal/engine/sync.go
+  s_ce2559e19fc721::t_92031fb868894d 253-255,258-259,265-275,277-287
+internal/engine/delete.go
+  s_ce2559e19fc721::t_92031fb868894d 6,26-29,120,150-153,173-183,208-239
+  s_ce2559e19fc721::t_32a3e7ffeaae5a 240
+internal/engine/sync_test.go
+  s_ce2559e19fc721::t_c7df101111b2a4 603-704
+internal/engine/delete_test.go
+  s_ce2559e19fc721::t_c7df101111b2a4 302-419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f50a66a75b442e8837e8dcc985d09984ea0fcba0",
+  "prompts": {},
+  "sessions": {
+    "s_ce2559e19fc721": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1855a20-7cb2-4572-b827-5b8ddaa7109e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
