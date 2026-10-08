@@ -250,30 +250,42 @@ func cleanMergedBranches(c *context.Context, g *graph.Graph, trunk string, confi
 		// while git still holds it strands it — dropped from the graph, alive on
 		// disk, restacked by nothing, and invisible to `sr log`.
 		if wtPath, werr := c.Git.WorktreeForBranch(name); werr == nil && wtPath != "" {
-			if sameWorktree(wtPath, c.Git.Dir) {
+			mainRoot, _ := deleteMainRoot(c)
+			switch {
+			case sameWorktree(wtPath, c.Git.Dir):
 				// The worktree we're running from. A process can't delete the
 				// directory it is executing in, so vacate the branch instead of
-				// removing the worktree. Land on trunk when it is free; when
-				// another worktree owns the trunk ref, detach at it instead —
-				// attempting the checkout first would only spill git's
-				// "already used by worktree" fatal into an otherwise fine sync.
-				vacate := []string{"checkout", trunk}
-				if trunkWt, terr := c.Git.WorktreeForBranch(trunk); terr == nil && trunkWt != "" {
-					vacate = []string{"checkout", "--detach", trunk}
-				}
-				if err := c.Git.RunGit(vacate...); err != nil {
+				// removing the worktree.
+				if _, err := vacateOntoTrunk(c, c.Git.Dir, trunk); err != nil {
 					if !c.Quiet {
 						fmt.Printf("Note: %s is merged but checked out here and could not be vacated (%v); leaving the branch in place\n", name, err)
 					}
 					continue
 				}
-			} else if rmErr := c.Git.WorktreeRemove(wtPath); rmErr != nil {
-				if !c.Quiet {
-					fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+			case mainRoot != "" && sameWorktree(wtPath, mainRoot):
+				// The main checkout. It can't be removed, only moved: park it on
+				// trunk so git releases the branch. Uncommitted work there rides
+				// along with the checkout, or git refuses and the branch stays.
+				detached, err := vacateOntoTrunk(c, wtPath, trunk)
+				if err != nil {
+					if !c.Quiet {
+						fmt.Printf("Note: %s is merged but checked out in the main checkout at %s and could not be vacated (%v); leaving the branch in place\n", name, wtPath, err)
+					}
+					continue
 				}
-				continue
-			} else if !c.Quiet {
-				fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+				if !c.Quiet {
+					fmt.Println(vacatedMessage("main checkout", wtPath, name, trunk, detached))
+				}
+			default:
+				if rmErr := c.Git.WorktreeRemove(wtPath); rmErr != nil {
+					if !c.Quiet {
+						fmt.Printf("Note: could not remove worktree %s for merged branch %s (%v); leaving it in place\n", wtPath, name, rmErr)
+					}
+					continue
+				}
+				if !c.Quiet {
+					fmt.Printf("Removed worktree for merged branch %s: %s\n", name, wtPath)
+				}
 			}
 		}
 
