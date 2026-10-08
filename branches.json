@@ -17,6 +17,10 @@
               "reference": "internal/engine/delete.go"
             }
           ]
+        },
+        {
+          "key": "trade-off",
+          "text": "Dirty linked worktrees still refuse: removing one destroys uncommitted work and vacating it would leave a stray worktree behind. Only the main checkout, which cannot be removed, is moved."
         }
       ]
     },
