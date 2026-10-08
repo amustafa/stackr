@@ -4,7 +4,7 @@
     "fix/vacate-main-checkout": {
       "parentBranchName": "main",
       "parentBranchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
-      "branchRevision": "a2cd1d8e6b9dc0bfc078038d645942da1aa1ef43",
+      "branchRevision": "f50a66a75b442e8837e8dcc985d09984ea0fcba0",
       "children": [],
       "description": "sync and delete vacate the main checkout onto trunk instead of refusing when it holds the branch being removed",
       "context": [
