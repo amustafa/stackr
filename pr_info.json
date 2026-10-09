@@ -194,6 +194,13 @@
       "baseBranch": "main",
       "stackNumber": 27
     },
+    "fix/restack-skip-dirty-current-worktree": {
+      "number": 60,
+      "title": "restack: skip, don't abort, when the current worktree has uncommitted changes",
+      "state": "OPEN",
+      "url": "https://github.com/amustafa/stackr/pull/60",
+      "baseBranch": "main"
+    },
     "fix/stale-base-after-parent-merge": {
       "number": 58,
       "title": "fix(base): recover a child's base after its parent squash-merges and the forge rebuilds it onto trunk",
