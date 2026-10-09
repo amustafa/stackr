@@ -4,7 +4,7 @@
     "fix/restack-skip-dirty-current-worktree": {
       "parentBranchName": "main",
       "parentBranchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
-      "branchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
+      "branchRevision": "7252e29e28a04c7a5ff1063e6f5a6e5d4df22b39",
       "children": [],
       "description": "restack skips (under sync) or refuses cleanly when the current worktree has uncommitted changes, instead of aborting the whole run on git's rebase precondition",
       "context": [
