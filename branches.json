@@ -1,9 +1,18 @@
 {
   "version": 1,
   "branches": {
-    "main": {
+    "fix/restack-skip-dirty-current-worktree": {
+      "parentBranchName": "main",
+      "parentBranchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
       "branchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
       "children": [],
+      "description": "restack skips (under sync) or refuses cleanly when the current worktree has uncommitted changes, instead of aborting the whole run on git's rebase precondition"
+    },
+    "main": {
+      "branchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
+      "children": [
+        "fix/restack-skip-dirty-current-worktree"
+      ],
       "isTrunk": true
     }
   }
