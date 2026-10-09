@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -565,5 +566,126 @@ func TestRestack_ParentSquashMergedAndChildRebuilt_RestacksWithoutBase(t *testin
 	if cb.ParentBranchName != s.trunk || cb.ParentBranchRevision != s.t3 {
 		t.Errorf("graph record after restack: parent=%s base=%s, want parent=%s base=%s",
 			cb.ParentBranchName, abbrev(cb.ParentBranchRevision), s.trunk, abbrev(s.t3))
+	}
+}
+
+// dirtyCurrentWorktree leaves the current checkout on `c` with an unstaged
+// edit to a tracked file — the state git's rebase refuses to start over.
+func dirtyCurrentWorktree(t *testing.T, c *context.Context) string {
+	t.Helper()
+	if err := c.Git.Checkout("c"); err != nil {
+		t.Fatalf("checkout c: %v", err)
+	}
+	commitFile(t, c, "work.txt", "committed", "c: add work.txt")
+	syncTip(t, c, "c")
+	path := filepath.Join(c.Git.Dir, "work.txt")
+	if err := os.WriteFile(path, []byte("in progress"), 0o644); err != nil {
+		t.Fatalf("edit work.txt: %v", err)
+	}
+	return path
+}
+
+// Uncommitted changes in the worktree sync runs from used to surface as git's
+// "cannot rebase: You have unstaged changes" — a precondition fatal that
+// aborted the whole run on the first branch needing a move here. Under sync's
+// skip-blocked policy those branches are now skipped like any other dirty
+// worktree, and branches that live in clean worktrees still restack.
+func TestRestack_DirtyCurrentWorktree_SkipsAndContinuesElsewhere(t *testing.T) {
+	c, trunk := setupRestackStack(t)
+
+	// A fourth branch on trunk, parked in its own clean worktree, that also
+	// needs restacking once trunk moves again.
+	if err := Create(c, CreateOpts{Name: "w"}); err != nil {
+		t.Fatalf("create w: %v", err)
+	}
+	if _, err := c.Git.RunGitCapture("commit", "--allow-empty", "-m", "w"); err != nil {
+		t.Fatalf("commit on w: %v", err)
+	}
+	syncTip(t, c, "w")
+	if err := c.Git.Checkout(trunk); err != nil {
+		t.Fatalf("checkout trunk: %v", err)
+	}
+	if _, err := c.Git.RunGitCapture("commit", "--allow-empty", "-m", "trunk moves again"); err != nil {
+		t.Fatalf("advance trunk: %v", err)
+	}
+	if _, err := c.Git.RunGitCapture("worktree", "add", t.TempDir()+"/wt-w", "w"); err != nil {
+		t.Fatalf("worktree add: %v", err)
+	}
+
+	aBefore, _ := c.Git.RevParse("a")
+	wBefore, _ := c.Git.RevParse("w")
+	edited := dirtyCurrentWorktree(t, c)
+
+	c.Quiet = false
+	out := captureStdout(t, func() {
+		if err := Restack(c, RestackOpts{Branch: trunk, Upstack: true, SkipBlocked: true}); err != nil {
+			t.Fatalf("skip-blocked restack should not error on a dirty current worktree: %v", err)
+		}
+	})
+
+	if aAfter, _ := c.Git.RevParse("a"); aAfter != aBefore {
+		t.Error("branch `a` was rebased despite uncommitted changes in the current worktree")
+	}
+	if wAfter, _ := c.Git.RevParse("w"); wAfter == wBefore {
+		t.Error("branch `w` in its own clean worktree was not restacked; the dirty current worktree should not block it")
+	}
+	if !strings.Contains(out, "uncommitted changes in worktree") {
+		t.Errorf("expected the summary to name the dirty worktree, got:\n%s", out)
+	}
+	if cur, _ := c.Git.CurrentBranch(); cur != "c" {
+		t.Errorf("current branch is %q, want to stay on c", cur)
+	}
+	if data, _ := os.ReadFile(edited); string(data) != "in progress" {
+		t.Errorf("uncommitted edit was lost or overwritten: %q", data)
+	}
+	if c.Git.IsRebaseInProgress() || c.Store.HasRebaseState() {
+		t.Error("a rebase was left in progress; nothing should have started")
+	}
+}
+
+// Without skip-blocked, the same state is a clean refusal naming the cause,
+// not git's transcript — and nothing is left half-done.
+func TestRestack_DirtyCurrentWorktree_RefusesCleanly(t *testing.T) {
+	c, _ := setupRestackStack(t)
+	aBefore, _ := c.Git.RevParse("a")
+	edited := dirtyCurrentWorktree(t, c)
+
+	err := Restack(c, RestackOpts{Branch: "a", Upstack: true})
+	if err == nil {
+		t.Fatal("restack over uncommitted changes succeeded; want error")
+	}
+	if !strings.Contains(err.Error(), "uncommitted changes in worktree") {
+		t.Errorf("error should name the uncommitted changes, got: %v", err)
+	}
+	if aAfter, _ := c.Git.RevParse("a"); aAfter != aBefore {
+		t.Error("branch `a` was rebased despite the refusal")
+	}
+	if data, _ := os.ReadFile(edited); string(data) != "in progress" {
+		t.Errorf("uncommitted edit was lost or overwritten: %q", data)
+	}
+	if c.Git.IsRebaseInProgress() || c.Store.HasRebaseState() {
+		t.Error("a rebase was left in progress; nothing should have started")
+	}
+}
+
+// Untracked files are not a reason to hold back: git rebases over them, and a
+// scratch file in the checkout must not stop sync from restacking.
+func TestRestack_UntrackedFileInCurrentWorktree_DoesNotBlock(t *testing.T) {
+	c, _ := setupRestackStack(t)
+	aBefore, _ := c.Git.RevParse("a")
+	scratch := filepath.Join(c.Git.Dir, "scratch.txt")
+	if err := os.WriteFile(scratch, []byte("notes"), 0o644); err != nil {
+		t.Fatalf("write scratch: %v", err)
+	}
+
+	if err := Restack(c, RestackOpts{Branch: "a", Upstack: true, SkipBlocked: true}); err != nil {
+		t.Fatalf("restack with only an untracked file present: %v", err)
+	}
+
+	if aAfter, _ := c.Git.RevParse("a"); aAfter == aBefore {
+		t.Error("branch `a` was not restacked; an untracked file must not block")
+	}
+	if _, err := os.Stat(scratch); err != nil {
+		t.Errorf("untracked scratch file disappeared: %v", err)
 	}
 }

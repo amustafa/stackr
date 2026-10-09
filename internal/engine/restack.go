@@ -171,6 +171,10 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 	curRoot := c.Git.Dir
 
 	blocked := map[string]bool{} // branch -> its lineage cannot be restacked
+	// Whether the current worktree can host a rebase at all, found out the
+	// first time one is needed here and remembered: a rebase that runs leaves
+	// the tree as clean as it found it, and one that is refused runs nothing.
+	var curBlocked *string // nil = not yet checked; "" = clean; else the reason
 	var restacked []string
 	var skipped []skippedBranch
 	current := 0 // already stacked on their parent's tip; nothing to do
@@ -281,6 +285,32 @@ func restackBranches(c *context.Context, branches []string, origBranch string, s
 				return fmt.Errorf("cannot restack %s: %s", name, reason)
 			}
 		} else {
+			// Git refuses to start a rebase over uncommitted changes to
+			// tracked files, and that refusal is a precondition fatal, not a
+			// resumable conflict — left to surface below it would abort the
+			// whole run on the first branch that needed moving. Check first
+			// and treat it like a dirty worktree elsewhere: skip under sync,
+			// fail cleanly otherwise. Untracked files don't count; git rebases
+			// over them, and so does this.
+			if curBlocked == nil {
+				reason := ""
+				if dirty, derr := c.Git.HasUncommittedChanges(); derr != nil {
+					reason = fmt.Sprintf("could not inspect worktree %s: %v", curRoot, derr)
+				} else if dirty {
+					reason = fmt.Sprintf("uncommitted changes in worktree %s", curRoot)
+				}
+				curBlocked = &reason
+			}
+			if *curBlocked != "" {
+				if skipBlocked {
+					blocked[name] = true
+					skipped = append(skipped, skippedBranch{name, *curBlocked})
+					continue
+				}
+				_ = c.Store.WriteGraph(g)
+				return fmt.Errorf("cannot restack %s: %s", name, *curBlocked)
+			}
+
 			// Rebase: --onto <new parent tip> <old parent rev> <branch>
 			if out, err := c.Git.RebaseOntoCaptured(b.ParentBranchName, base.SHA, name); err != nil {
 				// A rebase can fail two ways: it PAUSED on a merge conflict (a

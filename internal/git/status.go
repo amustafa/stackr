@@ -11,6 +11,17 @@ func (r *Runner) IsDirty() (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// HasUncommittedChanges reports whether tracked files carry staged or unstaged
+// changes — the condition under which git refuses to start a rebase. Untracked
+// files don't count: git rebases over them. IsDirty is the broader test.
+func (r *Runner) HasUncommittedChanges() (bool, error) {
+	out, err := r.RunGitCapture("status", "--porcelain", "--untracked-files=no")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 // HasStagedChanges returns true if there are staged changes.
 func (r *Runner) HasStagedChanges() (bool, error) {
 	_, _, err := r.RunGitCaptureAll("diff", "--cached", "--quiet")
