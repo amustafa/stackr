@@ -17,6 +17,10 @@
               "reference": "internal/engine/restack.go"
             }
           ]
+        },
+        {
+          "key": "trade-off",
+          "text": "Checked once per run, not per branch: a rebase that runs leaves the tree as clean as it found it. A user with rebase.autoStash set loses the ability to restack over a dirty tree in place; stackr never relied on that and the other-worktree path already refuses."
         }
       ]
     },
