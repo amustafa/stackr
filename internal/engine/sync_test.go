@@ -600,3 +600,105 @@ func TestSync_NothingToDo_SaysSo(t *testing.T) {
 		}
 	}
 }
+
+// setupMergedBranchInMainCheckout squash-merges "feature" onto trunk, leaves
+// the main checkout sitting on the now-merged feature branch, and returns a
+// context anchored in a worktree holding an unrelated branch — sync running
+// from somewhere other than the checkout that holds the merged branch.
+func setupMergedBranchInMainCheckout(t *testing.T, c *context.Context, trunk string) *context.Context {
+	t.Helper()
+	squashMergeFeatureLocally(t, c, trunk)
+	if err := Create(c, CreateOpts{Name: "other"}); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+	if err := c.Git.Checkout("feature"); err != nil {
+		t.Fatalf("checkout feature: %v", err)
+	}
+	wtOther := addWorktree(t, c, "other")
+	return contextAt(t, canonicalPath(wtOther))
+}
+
+// A merged branch held by the main checkout can't be removed like a linked
+// worktree; sync must move the main checkout onto trunk, carrying uncommitted
+// work along, and then delete the branch.
+func TestCleanMergedBranches_MovesMainCheckoutOffMergedBranch(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	cOther := setupMergedBranchInMainCheckout(t, c, trunk)
+	wip := filepath.Join(c.Git.Dir, "wip.txt")
+	if err := os.WriteFile(wip, []byte("wip"), 0o644); err != nil {
+		t.Fatalf("write wip file: %v", err)
+	}
+
+	g, err := cOther.Store.ReadGraph()
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	cleaned := cleanMergedBranches(cOther, g, trunk, false)
+
+	if len(cleaned) != 1 || cleaned[0].Name != "feature" {
+		t.Fatalf("expected [feature] cleaned, got %v", cleaned)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); exists {
+		t.Error("merged branch still exists after cleanup")
+	}
+	if current, _ := c.Git.CurrentBranch(); current != trunk {
+		t.Errorf("main checkout is on %q, want trunk %q", current, trunk)
+	}
+	if data, err := os.ReadFile(wip); err != nil || string(data) != "wip" {
+		t.Errorf("uncommitted file in main checkout lost across the move: %v", err)
+	}
+	if exists, _ := c.Git.BranchExists("other"); !exists {
+		t.Error("bystander branch other was deleted")
+	}
+}
+
+// If moving the main checkout onto trunk would overwrite local changes, git
+// refuses; sync must leave the branch tracked rather than strand it.
+func TestCleanMergedBranches_KeepsBranchWhenMainCheckoutMoveIsBlocked(t *testing.T) {
+	c, trunk := newBaseRepo(t)
+	cOther := setupMergedBranchInMainCheckout(t, c, trunk)
+	// Trunk moves on past the squash, changing feature.txt; the main checkout
+	// has an uncommitted edit to the same file, so checkout would clobber it.
+	cTrunk := contextAt(t, c.Git.Dir)
+	if _, err := cTrunk.Git.RunGitCapture("worktree", "add", t.TempDir(), trunk); err != nil {
+		t.Fatalf("worktree add trunk: %v", err)
+	}
+	trunkWt, _ := c.Git.WorktreeForBranch(trunk)
+	commitFile(t, contextAt(t, canonicalPath(trunkWt)), "feature.txt", "the feature v2", "feat: evolve feature")
+	if _, err := cTrunk.Git.RunGitCapture("worktree", "remove", trunkWt); err != nil {
+		t.Fatalf("worktree remove trunk: %v", err)
+	}
+	edited := filepath.Join(c.Git.Dir, "feature.txt")
+	if err := os.WriteFile(edited, []byte("local edit"), 0o644); err != nil {
+		t.Fatalf("write local edit: %v", err)
+	}
+
+	g, err := cOther.Store.ReadGraph()
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+	cOther.Quiet = false
+	var cleaned []cleanedBranch
+	out := captureStdout(t, func() {
+		cleaned = cleanMergedBranches(cOther, g, trunk, false)
+	})
+
+	if len(cleaned) != 0 {
+		t.Errorf("expected nothing cleaned, got %v", cleaned)
+	}
+	if !strings.Contains(out, "could not be vacated") {
+		t.Errorf("expected a note about the blocked move, got output:\n%s", out)
+	}
+	if exists, _ := c.Git.BranchExists("feature"); !exists {
+		t.Error("branch was deleted despite the blocked move")
+	}
+	if current, _ := c.Git.CurrentBranch(); current != "feature" {
+		t.Errorf("main checkout is on %q, want to stay on feature", current)
+	}
+	if data, _ := os.ReadFile(edited); string(data) != "local edit" {
+		t.Errorf("local edit was overwritten: %q", data)
+	}
+	if !g.Has("feature") {
+		t.Error("graph dropped feature while git still holds it — stranded")
+	}
+}

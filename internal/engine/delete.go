@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/amustafa/stackr/internal/context"
 	"github.com/amustafa/stackr/internal/sandbox"
@@ -22,7 +23,10 @@ type DeleteOpts struct {
 // the stack (like `sr down`) — the returned NavigateResult tells the shell hook
 // where to cd if that lands in another worktree. If the target is checked out
 // in a linked worktree, the worktree is removed first (refusing if it has
-// uncommitted changes), since git cannot delete a checked-out branch.
+// uncommitted changes), since git cannot delete a checked-out branch. If the
+// target is checked out in the main checkout, that checkout is moved onto
+// trunk instead — it cannot be removed, and uncommitted work there rides along
+// with the checkout, or git refuses and so does Delete.
 func Delete(c *context.Context, opts DeleteOpts) (NavigateResult, error) {
 	var nav NavigateResult
 
@@ -113,7 +117,7 @@ func Delete(c *context.Context, opts DeleteOpts) (NavigateResult, error) {
 	// delete a branch that is checked out. Do this for every target up front so
 	// a dirty worktree aborts the whole delete before any branch is removed.
 	for _, b := range targets {
-		if err := removeWorktreeHolding(c, b); err != nil {
+		if err := removeWorktreeHolding(c, b, g.TrunkName()); err != nil {
 			return nav, err
 		}
 	}
@@ -143,9 +147,10 @@ func Delete(c *context.Context, opts DeleteOpts) (NavigateResult, error) {
 }
 
 // removeWorktreeHolding removes the linked worktree that has branch checked
-// out, if any. It refuses to touch a dirty worktree, the main checkout, or the
-// worktree the command is running from.
-func removeWorktreeHolding(c *context.Context, branch string) error {
+// out, if any. It refuses to touch a dirty worktree or the worktree the command
+// is running from. The main checkout cannot be removed, so it is moved onto
+// trunk instead, carrying any uncommitted work along.
+func removeWorktreeHolding(c *context.Context, branch, trunk string) error {
 	wtPath, err := c.Git.WorktreeForBranch(branch)
 	if err != nil {
 		return err
@@ -165,7 +170,17 @@ func removeWorktreeHolding(c *context.Context, branch string) error {
 		return err
 	}
 	if absPath == mainRoot {
-		return fmt.Errorf("branch %q is checked out in the main checkout at %s; switch it to another branch first", branch, absPath)
+		// No dirty check here: git's own checkout is the safety check. Clean
+		// or carried-along changes let the branch go; a change the checkout
+		// would overwrite makes git refuse, and the delete stops with it.
+		detached, err := vacateOntoTrunk(c, absPath, trunk)
+		if err != nil {
+			return fmt.Errorf("branch %q is checked out in the main checkout at %s and could not be moved off it: %w", branch, absPath, err)
+		}
+		if !c.Quiet {
+			fmt.Println(vacatedMessage("main checkout", absPath, branch, trunk, detached))
+		}
+		return nil
 	}
 	if absPath == canonicalPath(c.Git.Dir) {
 		return fmt.Errorf("branch %q is checked out in the worktree you are running from; run `sr delete %s` from the main checkout", branch, branch)
@@ -188,6 +203,39 @@ func removeWorktreeHolding(c *context.Context, branch string) error {
 		fmt.Printf("Removed worktree at %s\n", absPath)
 	}
 	return nil
+}
+
+// vacateOntoTrunk moves the checkout at dir off the branch it holds and onto
+// trunk, so git will let that branch be deleted. Uncommitted changes ride
+// along: git refuses the checkout when one of them would be overwritten, and
+// that refusal is the returned error, so callers need no separate dirty check.
+// When another worktree already owns the trunk ref the checkout detaches at
+// trunk instead — attempting the branch checkout would only fail with git's
+// "already used by worktree" — and detached reports that.
+func vacateOntoTrunk(c *context.Context, dir, trunk string) (detached bool, err error) {
+	args := []string{"checkout", "--quiet", trunk}
+	if trunkWt, werr := c.Git.WorktreeForBranch(trunk); werr == nil && trunkWt != "" && !sameWorktree(trunkWt, dir) {
+		args = []string{"checkout", "--quiet", "--detach", trunk}
+		detached = true
+	}
+	r := *c.Git
+	r.Dir = dir
+	if _, stderr, err := r.RunGitCaptureAll(args...); err != nil {
+		if stderr != "" {
+			return detached, fmt.Errorf("%s", strings.ReplaceAll(stderr, "\n", " "))
+		}
+		return detached, err
+	}
+	return detached, nil
+}
+
+// vacatedMessage reports a vacateOntoTrunk that succeeded, naming where the
+// checkout landed.
+func vacatedMessage(what, dir, branch, trunk string, detached bool) string {
+	if detached {
+		return fmt.Sprintf("Detached %s at %s from %s at %s (%s is checked out in another worktree)", what, dir, branch, trunk, trunk)
+	}
+	return fmt.Sprintf("Moved %s at %s from %s onto %s", what, dir, branch, trunk)
 }
 
 // deleteMainRoot returns the canonical path of the main checkout.
