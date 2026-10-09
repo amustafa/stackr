@@ -6,7 +6,19 @@
       "parentBranchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
       "branchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
       "children": [],
-      "description": "restack skips (under sync) or refuses cleanly when the current worktree has uncommitted changes, instead of aborting the whole run on git's rebase precondition"
+      "description": "restack skips (under sync) or refuses cleanly when the current worktree has uncommitted changes, instead of aborting the whole run on git's rebase precondition",
+      "context": [
+        {
+          "key": "approach",
+          "text": "Pre-check the current worktree with git's own rebase precondition (staged or unstaged changes to tracked files) before the first in-place rebase, and treat it like a dirty worktree elsewhere: skip under sync's skip-blocked policy, fail cleanly otherwise. Untracked files don't block, because git rebases over them.",
+          "sources": [
+            {
+              "type": "file",
+              "reference": "internal/engine/restack.go"
+            }
+          ]
+        }
+      ]
     },
     "main": {
       "branchRevision": "40f5865010933eccb6edc9f2bcc8b67913cca466",
