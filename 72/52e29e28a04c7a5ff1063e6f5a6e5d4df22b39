@@ -1,0 +1,24 @@
+internal/engine/restack.go
+  s_ce2559e19fc721::t_a67cbb4a6740a1 174-177,288-313
+internal/engine/restack_test.go
+  s_ce2559e19fc721::t_a67cbb4a6740a1 571-691
+  s_ce2559e19fc721::t_75ca85b5985f68 6
+internal/git/status.go
+  s_ce2559e19fc721::t_a67cbb4a6740a1 14-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7252e29e28a04c7a5ff1063e6f5a6e5d4df22b39",
+  "prompts": {},
+  "sessions": {
+    "s_ce2559e19fc721": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1855a20-7cb2-4572-b827-5b8ddaa7109e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Adam Mustafa <amustafa@hiddenroad.com>"
+    }
+  }
+}
